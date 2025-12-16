@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X, User, LogOut, Shield, ShoppingCart, Package } from "lucide-react";
+import { Menu, X, User, LogOut, Shield, ShoppingCart, Package, ChevronDown, ChevronRight, Search } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiService } from "@/services/api.service";
 import { useCart } from "@/contexts/CartContext";
@@ -13,9 +13,19 @@ interface UserInfo {
     name: string;
     role?: string;
 }
+// 🔥 LINKS MATCHING APP.X ROUTES
+const CATEGORIES = [
+    { name: "3D Printers", path: "/printers" },
+    { name: "3D Printables", path: "/printables" },
+    { name: "Filaments", path: "/filaments" },
+    { name: "Resins", path: "/resins" },
+    { name: "Accessories", path: "/accessories" },
+    { name: "Spare Parts", path: "/spare-parts" },
+];
 
 export const Navigation = () => {
     const [isOpen, setIsOpen] = useState(false);
+    const [isProductMenuOpen, setIsProductMenuOpen] = useState(false);
     const [user, setUser] = useState<UserInfo | null>(null);
     const [isAdmin, setIsAdmin] = useState(false);
     const [authLoading, setAuthLoading] = useState(true);
@@ -64,7 +74,8 @@ export const Navigation = () => {
         });
     }, [checkAuthStatus]);
 
-    // Optional: Poll every 5 minutes (300000 ms) for token expiration
+    // Optional: Poll every 5 minutes (
+    // 300000 ms) for token expiration
     useEffect(() => {
         const interval = setInterval(checkAuthStatus, 300); // 5 minutes
         return () => clearInterval(interval);
@@ -82,93 +93,113 @@ export const Navigation = () => {
         setIsOpen(false);
     };
 
-    // Show loading state while checking auth
-    if (authLoading) {
-        return (
-            <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border h-20 flex items-center justify-center">
-                <div className="w-8 h-8 border-2 border-primary rounded-full animate-spin" />
-            </nav>
-        );
-    }
+    if (authLoading) return null;
 
     return (
-        <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border">
+        <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-md border-b border-border shadow-sm">
             <div className="container mx-auto px-4">
                 <div className="flex items-center justify-between h-20">
-                    <Link to="/" className="flex items-center space-x-2">
-                        <span className="font-display text-2xl font-bold text-foreground">
+
+                    {/* Logo */}
+                    <Link to="/" className="flex items-center gap-2 group">
+                        <div className="relative w-9 h-9">
+                            <div className="absolute inset-0 bg-gradient-to-br from-yellow-400 via-red-500 to-primary rounded-lg transform rotate-6 opacity-80 group-hover:rotate-12 transition-transform"></div>
+                            <div className="absolute inset-0 bg-background border border-border rounded-lg flex items-center justify-center text-lg font-bold text-primary shadow-sm">
+                                P
+                            </div>
+                        </div>
+                        <span className="font-display text-xl font-bold text-foreground">
                             ProtoDesign
                         </span>
                     </Link>
 
-                    {/* Desktop Navigation */}
-                    <div className="hidden md:flex items-center space-x-6">
-                        <Link to="/" className="text-foreground hover:text-primary transition-all duration-200">
+                    {/* Desktop Nav */}
+                    <div className="hidden md:flex items-center space-x-8">
+                        <Link to="/" className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors">
                             Home
                         </Link>
-                        <Link to="/shop" className="text-foreground hover:text-primary transition-all duration-200">
-                            Shop Printers
-                        </Link>
-                        <Link to="/custom" className="text-foreground hover:text-primary transition-all duration-200">
+
+                        {/* Dropdown */}
+                        <div className="relative group h-20 flex items-center">
+                            <button className="flex items-center gap-1 text-sm font-medium text-foreground/80 group-hover:text-primary transition-colors focus:outline-none">
+                                Products
+                                <ChevronDown size={14} className="transition-transform duration-200 group-hover:rotate-180" />
+                            </button>
+
+                            <div className="absolute top-full left-1/2 -translate-x-1/2 w-56 bg-background rounded-xl shadow-xl border border-border opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 transform group-hover:translate-y-0 translate-y-2 p-2">
+                                {CATEGORIES.map((cat) => (
+                                    <Link
+                                        key={cat.name}
+                                        to={cat.path}
+                                        className="flex items-center justify-between px-3 py-2 hover:bg-accent rounded-lg group/item transition-colors"
+                                    >
+                                        <span className="text-sm text-foreground group-hover/item:text-primary">{cat.name}</span>
+                                        <ChevronRight size={14} className="text-muted-foreground group-hover/item:text-primary" />
+                                    </Link>
+                                ))}
+                            </div>
+                        </div>
+
+                        <Link to="/custom" className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors">
                             Custom Printing
                         </Link>
 
                         {user && (
-                            <Link to="/orders" className="text-foreground hover:text-primary transition-all duration-200 flex items-center gap-1">
-                                <Package className="w-4 h-4" />
+                            <Link to="/orders" className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors flex items-center gap-1">
                                 Orders
                             </Link>
                         )}
 
                         {isAdmin && (
-                            <Link to="/admin" className="text-foreground hover:text-primary transition-all duration-200 flex items-center gap-1">
-                                <Shield className="w-4 h-4" />
+                            <Link to="/admin" className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors flex items-center gap-1">
                                 Admin
-                            </Link>
-                        )}
-
-                        <Link to="/cart" className="relative">
-                            <Button variant="ghost" size="icon" asChild>
-                                <ShoppingCart className="w-5 h-5" />
-                            </Button>
-                            {itemCount > 0 && (
-                                <Badge className="absolute -top-2 -right-2 h-6 w-6 flex items-center justify-center p-0 text-xs font-bold bg-destructive text-destructive-foreground border-2 border-background">
-                                    {itemCount}
-                                </Badge>
-                            )}
-                        </Link>
-
-                        {user ? (
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm text-muted-foreground max-w-32 truncate">
-                                    Hi, {user.name}
-                                </span>
-                                <Button variant="outline" size="sm" onClick={handleSignOut}>
-                                    <LogOut className="w-4 h-4 mr-2" />
-                                    Sign Out
-                                </Button>
-                            </div>
-                        ) : (
-                            <Link to="/auth">
-                                <Button variant="default" size="sm">
-                                    <User className="w-4 h-4 mr-2" />
-                                    Sign In
-                                </Button>
                             </Link>
                         )}
                     </div>
 
-                    {/* Mobile Menu Button */}
-                    <button
-                        className="md:hidden p-2 rounded-lg hover:bg-accent transition-colors"
-                        onClick={() => setIsOpen(!isOpen)}
-                        aria-label="Toggle menu"
-                    >
-                        {isOpen ? <X size={24} /> : <Menu size={24} />}
-                    </button>
+                    {/* Right Icons */}
+                    <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" className="hidden sm:flex text-muted-foreground hover:text-primary">
+                            <Search size={20} />
+                        </Button>
+
+                        <Link to="/cart">
+                            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-primary">
+                                <ShoppingCart size={20} />
+                                {itemCount > 0 && (
+                                    <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+                                        {itemCount}
+                                    </span>
+                                )}
+                            </Button>
+                        </Link>
+
+                        <div className="hidden md:flex items-center gap-2 ml-2 pl-2 border-l">
+                            {user ? (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium hidden lg:block">{user.name}</span>
+                                    <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign Out">
+                                        <LogOut size={18} />
+                                    </Button>
+                                </div>
+                            ) : (
+                                <Link to="/auth">
+                                    <Button size="sm" className="rounded-full px-6">Sign In</Button>
+                                </Link>
+                            )}
+                        </div>
+
+                        {/* Mobile Toggle */}
+                        <button
+                            className="md:hidden p-2 text-foreground/80"
+                            onClick={() => setIsOpen(!isOpen)}
+                        >
+                            {isOpen ? <X size={24} /> : <Menu size={24} />}
+                        </button>
+                    </div>
                 </div>
 
-                {/* Mobile Navigation */}
+                {/* Mobile Menu */}
                 <AnimatePresence>
                     {isOpen && (
                         <motion.div
@@ -176,75 +207,44 @@ export const Navigation = () => {
                             animate={{ opacity: 1, height: "auto" }}
                             exit={{ opacity: 0, height: 0 }}
                             transition={{ duration: 0.2 }}
-                            className="md:hidden overflow-hidden border-t bg-background/95 backdrop-blur-md"
+                            className="md:hidden overflow-hidden border-t bg-background"
                         >
-                            <div className="py-4 space-y-2 px-4">
-                                <Link
-                                    to="/"
-                                    className="block py-3 px-3 rounded-lg text-foreground hover:text-primary hover:bg-accent transition-all duration-200"
-                                    onClick={() => setIsOpen(false)}
-                                >
-                                    Home
-                                </Link>
-                                <Link
-                                    to="/shop"
-                                    className="block py-3 px-3 rounded-lg text-foreground hover:text-primary hover:bg-accent transition-all duration-200"
-                                    onClick={() => setIsOpen(false)}
-                                >
-                                    Shop Printers
-                                </Link>
-                                <Link
-                                    to="/custom"
-                                    className="block py-3 px-3 rounded-lg text-foreground hover:text-primary hover:bg-accent transition-all duration-200"
-                                    onClick={() => setIsOpen(false)}
-                                >
-                                    Custom Printing
-                                </Link>
-                                <Link
-                                    to="/cart"
-                                    className="block py-3 px-3 rounded-lg text-foreground hover:text-primary hover:bg-accent transition-all duration-200 flex items-center gap-2"
-                                    onClick={() => setIsOpen(false)}
-                                >
-                                    <ShoppingCart className="w-4 h-4" />
-                                    Cart {itemCount > 0 && `(${itemCount})`}
-                                </Link>
-                                {user && (
-                                    <Link
-                                        to="/orders"
-                                        className="block py-3 px-3 rounded-lg text-foreground hover:text-primary hover:bg-accent transition-all duration-200 flex items-center gap-2"
-                                        onClick={() => setIsOpen(false)}
+                            <div className="py-4 space-y-1 px-4">
+                                <Link to="/" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg">Home</Link>
+
+                                <div>
+                                    <button
+                                        onClick={() => setIsProductMenuOpen(!isProductMenuOpen)}
+                                        className="flex w-full items-center justify-between py-3 px-3 font-medium hover:bg-accent rounded-lg"
                                     >
-                                        <Package className="w-4 h-4" />
-                                        My Orders
-                                    </Link>
-                                )}
-                                {isAdmin && (
-                                    <Link
-                                        to="/admin"
-                                        className="block py-3 px-3 rounded-lg text-foreground hover:text-primary hover:bg-accent transition-all duration-200 flex items-center gap-2"
-                                        onClick={() => setIsOpen(false)}
-                                    >
-                                        <Shield className="w-4 h-4" />
-                                        Admin Dashboard
-                                    </Link>
-                                )}
-                                {user ? (
-                                    <Button
-                                        variant="outline"
-                                        className="w-full mt-2"
-                                        onClick={handleSignOut}
-                                    >
-                                        <LogOut className="w-4 h-4 mr-2" />
-                                        Sign Out
-                                    </Button>
-                                ) : (
-                                    <Link to="/auth" onClick={() => setIsOpen(false)}>
-                                        <Button variant="default" className="w-full mt-2">
-                                            <User className="w-4 h-4 mr-2" />
-                                            Sign In
+                                        Products
+                                        <ChevronDown size={16} className={`transition-transform ${isProductMenuOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    <div className={`pl-6 space-y-1 overflow-hidden transition-all duration-300 ${isProductMenuOpen ? 'max-h-96 pb-2' : 'max-h-0'}`}>
+                                        {CATEGORIES.map(cat => (
+                                            <Link key={cat.name} to={cat.path} onClick={() => setIsOpen(false)} className="block py-2 text-sm text-muted-foreground hover:text-primary">
+                                                {cat.name}
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <Link to="/custom" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg">Custom Printing</Link>
+
+                                {user && <Link to="/orders" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg">My Orders</Link>}
+                                {isAdmin && <Link to="/admin" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg text-primary">Admin Dashboard</Link>}
+
+                                <div className="pt-4 mt-2 border-t">
+                                    {user ? (
+                                        <Button variant="outline" className="w-full justify-start" onClick={handleSignOut}>
+                                            <LogOut className="w-4 h-4 mr-2" /> Sign Out ({user.name})
                                         </Button>
-                                    </Link>
-                                )}
+                                    ) : (
+                                        <Link to="/auth" onClick={() => setIsOpen(false)}>
+                                            <Button className="w-full">Sign In</Button>
+                                        </Link>
+                                    )}
+                                </div>
                             </div>
                         </motion.div>
                     )}

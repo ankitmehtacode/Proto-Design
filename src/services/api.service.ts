@@ -128,9 +128,13 @@ class ApiService {
     }
 
     // ========== Products Routes ==========
-    async getProducts(category?: string, search?: string) {
+
+    // ✅ FIXED: Now accepts 3 arguments to match ProductDetail.tsx and support sub-categories
+    async getProducts(category?: string | null, subCategory?: string | null, search?: string | null) {
         const params = new URLSearchParams();
-        if (category) params.append("category", category);
+
+        if (category && category !== 'all') params.append("category", category);
+        if (subCategory && subCategory !== 'all') params.append("sub_category", subCategory);
         if (search) params.append("search", search);
 
         const query = params.toString() ? `?${params.toString()}` : "";
@@ -243,6 +247,19 @@ class ApiService {
         });
     }
 
+    // ========== CUSTOMER ORDER ACTIONS ==========
+
+    async cancelOrder(orderId: string) {
+        return this.request(`/orders/${orderId}/cancel`, { method: "POST" });
+    }
+
+    async updateOrderAddress(orderId: string, address: any) {
+        return this.request(`/orders/${orderId}/address`, {
+            method: "PUT",
+            body: JSON.stringify({ address })
+        });
+    }
+
     async updateOrderStatus(id: string, status: string) {
         return this.request(`/orders/${id}`, {
             method: "PUT",
@@ -252,6 +269,18 @@ class ApiService {
 
     async getAdminOrders() {
         return this.request("/orders/admin/all", { method: "GET" });
+    }
+
+    // ===== REVIEWS =====
+    async getProductReviews(productId: string) {
+        return this.request(`/products/${productId}/reviews`, { method: "GET" });
+    }
+
+    async addProductReview(productId: string, rating: number, comment: string) {
+        return this.request(`/products/${productId}/reviews`, {
+            method: "POST",
+            body: JSON.stringify({ rating, comment }),
+        });
     }
 
     // ===== LIKE METHODS =====
@@ -268,6 +297,5 @@ class ApiService {
     }
 
 }
-
 
 export const apiService = new ApiService();

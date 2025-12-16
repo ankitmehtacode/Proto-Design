@@ -39,7 +39,8 @@ const authMiddleware = (req, res, next) => {
         );
 
         // Attach user info to request (These properties extend the default Request object)
-        req.userId = decoded.userId;
+        // Attach user info to request
+        req.userId = decoded.userId || decoded.id;    // ✅ supports tokens with userId OR id
         req.userRole = decoded.role || 'user';
         req.userEmail = decoded.email;
 

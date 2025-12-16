@@ -5,6 +5,7 @@ import authMiddleware from '../middleware/auth.js';
 const router = express.Router();
 
 // GET /api/orders
+// GET /api/orders
 router.get('/', authMiddleware, async (req, res, next) => {
     try {
         const orders = await db.manyOrNone(
@@ -18,6 +19,8 @@ router.get('/', authMiddleware, async (req, res, next) => {
                         CAST(o.total_amount AS NUMERIC) AS total_amount,
                         o.status,
                         o.created_at,
+                        o.shipping_address,
+                        o.payment_gateway,
                         DATE_TRUNC('second', o.created_at) AS order_group,
                         p.id   AS product_id_real,
                         p.name AS product_name,
@@ -29,12 +32,15 @@ router.get('/', authMiddleware, async (req, res, next) => {
                     WHERE o.user_id = $1
                 )
                 SELECT
-                    MIN(id::text) AS id,                              -- pick one id per group
+                    MIN(id::text) AS id,
                     MIN(created_at) AS created_at,
                     SUM(total_amount) AS total_amount,
                     SUM(quantity) AS total_quantity,
                     MAX(status) AS status,
                     order_group,
+                    -- ✅ pick any non-null shipping_address & cast safely
+                    MIN(shipping_address::text)::jsonb AS shipping_address,
+                    MAX(payment_gateway) AS payment_gateway,
                     json_agg(
                             json_build_object(
                                     'product_id', product_id_real,
@@ -57,7 +63,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
                 GROUP BY order_group
                 ORDER BY MIN(created_at) DESC
             `,
-            [req.userId]
+            [req.userId],
         );
 
         res.json({ success: true, count: orders.length, data: orders });
@@ -66,6 +72,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
         next(error);
     }
 });
+
 
 
 
@@ -251,23 +258,32 @@ router.get('/admin/all', authMiddleware, async (req, res, next) => {
                         CAST(o.total_amount AS NUMERIC) AS total_amount,
                         o.status,
                         o.created_at,
+                        o.shipping_address,
+                        o.payment_gateway,
                         DATE_TRUNC('second', o.created_at) AS order_group,
-                        p.id   AS product_id_real,
-                        p.name AS product_name,
+                        u.email       AS user_email,
+                        u.full_name   AS user_name,
+                        p.id          AS product_id_real,
+                        p.name        AS product_name,
                         CAST(p.price AS NUMERIC) AS product_price,
                         p.image_data,
                         p.image_url
                     FROM orders o
+                             LEFT JOIN users u ON o.user_id = u.id
                              LEFT JOIN products p ON o.product_id = p.id
                 )
                 SELECT
                     MIN(id::text) AS id,
                     MIN(created_at) AS created_at,
                     user_id,
+                    MAX(user_email) AS user_email,
+                    MAX(user_name) AS user_name,
                     SUM(total_amount) AS total_amount,
                     SUM(quantity) AS total_quantity,
                     MAX(status) AS status,
                     order_group,
+                    MIN(shipping_address::text)::jsonb AS shipping_address,
+                    MAX(payment_gateway) AS payment_gateway,
                     json_agg(
                             json_build_object(
                                     'product_id', product_id_real,
@@ -289,7 +305,7 @@ router.get('/admin/all', authMiddleware, async (req, res, next) => {
                 FROM base
                 GROUP BY order_group, user_id
                 ORDER BY MIN(created_at) DESC
-            `
+            `,
         );
 
         res.json({ success: true, count: orders.length, data: orders });
@@ -299,5 +315,92 @@ router.get('/admin/all', authMiddleware, async (req, res, next) => {
     }
 });
 
+// ==========================================
+// CUSTOMER ACTIONS (Cancel & Edit Address)
+// ==========================================
+
+/**
+ * POST /api/orders/:id/cancel
+ * Cancels an order (and all sibling items in the same checkout group)
+ */
+router.post('/:id/cancel', authMiddleware, async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const userId = req.userId;
+
+        // 1. Check if the order exists and is eligible for cancellation
+        const order = await db.oneOrNone(
+            'SELECT status, created_at FROM orders WHERE id = $1 AND user_id = $2',
+            [id, userId]
+        );
+
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        const allowCancel = ['pending', 'pending_payment', 'processing'];
+        if (!allowCancel.includes(order.status)) {
+            return res.status(400).json({ error: 'Order cannot be cancelled at this stage' });
+        }
+
+        // 2. Cancel ALL items that were bought in the same "second" (same checkout group)
+        // We use DATE_TRUNC to match the grouping logic used in your GET route
+        await db.none(
+            `UPDATE orders 
+             SET status = 'cancelled', updated_at = NOW()
+             WHERE user_id = $1 
+             AND DATE_TRUNC('second', created_at) = DATE_TRUNC('second', $2::timestamp)`,
+            [userId, order.created_at]
+        );
+
+        res.json({ success: true, message: 'Order cancelled successfully' });
+    } catch (error) {
+        console.error('Cancel order error:', error);
+        next(error);
+    }
+});
+
+/**
+ * PUT /api/orders/:id/address
+ * Updates shipping address for an order (and all sibling items)
+ */
+router.put('/:id/address', authMiddleware, async (req, res, next) => {
+    try {
+        const { id } = req.params;
+        const { address } = req.body;
+        const userId = req.userId;
+
+        if (!address) return res.status(400).json({ error: 'Address data required' });
+
+        // 1. Check order status
+        const order = await db.oneOrNone(
+            'SELECT status, created_at FROM orders WHERE id = $1 AND user_id = $2',
+            [id, userId]
+        );
+
+        if (!order) {
+            return res.status(404).json({ error: 'Order not found' });
+        }
+
+        const allowEdit = ['pending', 'pending_payment', 'processing'];
+        if (!allowEdit.includes(order.status)) {
+            return res.status(400).json({ error: 'Cannot update address for shipped orders' });
+        }
+
+        // 2. Update address for ALL items in the same checkout group
+        await db.none(
+            `UPDATE orders 
+             SET shipping_address = $1, updated_at = NOW()
+             WHERE user_id = $2 
+             AND DATE_TRUNC('second', created_at) = DATE_TRUNC('second', $3::timestamp)`,
+            [JSON.stringify(address), userId, order.created_at]
+        );
+
+        res.json({ success: true, message: 'Address updated successfully' });
+    } catch (error) {
+        console.error('Update address error:', error);
+        next(error);
+    }
+});
 
 export default router;

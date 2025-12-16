@@ -128,7 +128,6 @@ const CustomPrinting = () => {
         );
     };
 
-    // For now just store reference images locally; you can wire this to Postgres API later
     const handleImageUpload = async (file: File) => {
         if (!file.type.startsWith("image/")) {
             toast.error("Please upload an image file");
@@ -157,7 +156,7 @@ const CustomPrinting = () => {
     return (
         <div className="min-h-screen pt-20">
             {/* Hero Section */}
-            <section className="py-16 gradient-subtle">
+            <section className="py-16 gradient-subtle mb-8">
                 <div className="container mx-auto px-4">
                     <motion.div
                         initial={{ opacity: 0, y: 30 }}
@@ -177,7 +176,7 @@ const CustomPrinting = () => {
             </section>
 
             {/* Main Content */}
-            <section className="py-16">
+            <section className="py-8">
                 <div className="container mx-auto px-4">
                     <div className="grid lg:grid-cols-2 gap-8">
                         {/* Left Column - 3D Model Preview */}

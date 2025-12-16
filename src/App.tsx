@@ -8,6 +8,8 @@ import { CartProvider } from "@/contexts/CartContext";
 import Index from "./pages/Index";
 import Shop from "./pages/Shop";
 import CustomPrinting from "./pages/CustomPrinting";
+import ProductDetail from "./pages/ProductDetail";
+import CategoryPage from "./pages/CategoryPage";
 import Auth from "./pages/Auth";
 import AdminDashboard from "./pages/AdminDashboard";
 import Cart from "./pages/Cart";
@@ -18,29 +20,95 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <CartProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Navigation />
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/shop" element={<Shop />} />
-            <Route path="/custom" element={<CustomPrinting />} />
-            <Route path="/cart" element={<Cart />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/orders" element={<Orders />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </CartProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+            <CartProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                    <Navigation />
+                    <Routes>
+                        <Route path="/" element={<Index />} />
+
+                        {/* General Shop */}
+                        <Route path="/shop" element={<Shop />} />
+
+                        {/* --- UPDATED CATEGORY ROUTES --- */}
+
+                        {/* 1. 3D Printers: FDM, SLA, Metal, 3D Pen, Others */}
+                        <Route path="/printers" element={
+                            <CategoryPage
+                                category="3d_printer"
+                                title="3D Printers"
+                                subtitle="FDM, SLA, Metal 3D Printer, 3D Pen & More"
+                                subCategories={['FDM', 'SLA', 'Metal 3D Printer', '3D Pen', 'Others']}
+                            />
+                        } />
+
+                        {/* 2. 3D Printables: Search only */}
+                        <Route path="/printables" element={
+                            <CategoryPage
+                                category="3dprintables"
+                                title="3D Printables"
+                                subtitle="Ready-to-print models and designs."
+                                subCategories={[]}
+                            />
+                        } />
+
+                        {/* 3. Filaments: ABS, PETG, PLA, Carbon Fiber, Nylon Fiber, Others */}
+                        <Route path="/filaments" element={
+                            <CategoryPage
+                                category="filament"
+                                title="Premium Filaments"
+                                subtitle="High-quality materials for your FDM printer."
+                                subCategories={['ABS', 'PETG', 'PLA', 'Carbon Fiber', 'Nylon Fiber', 'Others']}
+                            />
+                        } />
+
+                        {/* 4. Accessories: Search Only */}
+                        <Route path="/accessories" element={
+                            <CategoryPage
+                                category="accessory"
+                                title="Accessories"
+                                subtitle="Tools and upgrades for your workstation."
+                                subCategories={[]}
+                            />
+                        } />
+
+                        {/* 5. Spare Parts: Search Only */}
+                        <Route path="/spare-parts" element={
+                            <CategoryPage
+                                category="spare_part"
+                                title="Spare Parts"
+                                subtitle="Essential components for maintenance and repair."
+                                subCategories={[]}
+                            />
+                        } />
+
+                        {/* 6. Resins: Standard, Water-Washable, Tough, Others */}
+                        <Route path="/resins" element={
+                            <CategoryPage
+                                category="resin"
+                                title="Resins"
+                                subtitle="Photopolymer resins for high-detail SLA/DLP printing."
+                                subCategories={['Standard', 'Water-Washable', 'Tough', 'Others']}
+                            />
+                        } />
+
+                        {/* Details & Other Pages */}
+                        <Route path="/product/:productId" element={<ProductDetail />} />
+                        <Route path="/custom" element={<CustomPrinting />} />
+                        <Route path="/cart" element={<Cart />} />
+                        <Route path="/checkout" element={<Checkout />} />
+                        <Route path="/orders" element={<Orders />} />
+                        <Route path="/auth" element={<Auth />} />
+                        <Route path="/admin" element={<AdminDashboard />} />
+                        <Route path="*" element={<NotFound />} />
+                    </Routes>
+                </BrowserRouter>
+            </CartProvider>
+        </TooltipProvider>
+    </QueryClientProvider>
 );
 
 export default App;

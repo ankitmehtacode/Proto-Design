@@ -1,22 +1,21 @@
 import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';  // ✅ useEffect + navigate
+import { useNavigate } from 'react-router-dom';
 import { useCart } from '@/contexts/CartContext';
-import { apiService } from '@/services/api.service';  // ✅ Add this
+import { apiService } from '@/services/api.service';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatINR } from '@/lib/currency';
 import { Minus, Plus, Trash2, ShoppingBag } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-
+import { motion } from 'framer-motion';
 
 const Cart = () => {
     const navigate = useNavigate();
-    const { items, removeFromCart, updateQuantity, total, itemCount, loading, loadCart } = useCart(); // ✅ Context state
-
+    const { items, removeFromCart, updateQuantity, total, itemCount, loading, loadCart } = useCart();
 
     useEffect(() => {
         if (apiService.isAuthenticated()) {
-            loadCart(); // Reload fresh from backend
+            loadCart();
         }
     }, []);
 
@@ -30,9 +29,25 @@ const Cart = () => {
 
     if (items.length === 0) {
         return (
-            <div className="mi@n-h-screen pt-20 pb-10">
+            <div className="min-h-screen pt-20 pb-10">
+                {/* Empty Cart Hero */}
+                <section className="py-16 gradient-subtle mb-8">
+                    <div className="container mx-auto px-4">
+                        <motion.div
+                            initial={{ opacity: 0, y: 30 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.6 }}
+                            className="text-center max-w-3xl mx-auto"
+                        >
+                            <h1 className="font-display text-5xl md:text-6xl mb-6">Your Shopping Cart</h1>
+                            <p className="text-xl text-muted-foreground">
+                                Review your selected items and secure your order.
+                            </p>
+                        </motion.div>
+                    </div>
+                </section>
+
                 <div className="container mx-auto px-4">
-                    <h1 className="font-display text-4xl mb-8">Shopping Cart</h1>
                     <Card className="text-center py-12">
                         <ShoppingBag className="mx-auto h-16 w-16 text-muted-foreground mb-4 opacity-50" />
                         <CardTitle className="mb-2">Your cart is empty</CardTitle>
@@ -50,10 +65,27 @@ const Cart = () => {
 
     return (
         <div className="min-h-screen pt-20 pb-10">
+            {/* Hero Section */}
+            <section className="py-16 gradient-subtle mb-12">
+                <div className="container mx-auto px-4">
+                    <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.6 }}
+                        className="text-center max-w-3xl mx-auto"
+                    >
+                        <h1 className="font-display text-5xl md:text-6xl mb-6">Your Shopping Cart</h1>
+                        <p className="text-xl text-muted-foreground">
+                            Review your selected items and secure your order.
+                        </p>
+                    </motion.div>
+                </div>
+            </section>
+
             <div className="container mx-auto px-4">
-                <h1 className="font-display text-4xl mb-8">
-                    Shopping Cart ({itemCount} items)
-                </h1>
+                <h2 className="font-display text-2xl mb-8">
+                    Items ({itemCount})
+                </h2>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Cart Items */}
@@ -65,19 +97,11 @@ const Cart = () => {
                                         {/* Product Image */}
                                         {item.product.image_url && (
                                             <div className="w-24 h-24 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
-                                                {item.product.image_url.startsWith('data:') ? (
-                                                    <img
-                                                        src={item.product.image_url}
-                                                        alt={item.product.name}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                ) : (
-                                                    <img
-                                                        src={item.product.image_url}
-                                                        alt={item.product.name}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                )}
+                                                <img
+                                                    src={item.product.image_url}
+                                                    alt={item.product.name}
+                                                    className="w-full h-full object-cover"
+                                                />
                                             </div>
                                         )}
 
@@ -96,17 +120,11 @@ const Cart = () => {
 
                                         {/* Quantity & Actions */}
                                         <div className="flex flex-col items-end justify-between">
-                                            {/* Quantity Selector */}
                                             <div className="flex items-center gap-2 bg-muted rounded-lg p-1">
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() =>
-                                                        updateQuantity(
-                                                            item.product_id,
-                                                            item.quantity - 1
-                                                        )
-                                                    }
+                                                    onClick={() => updateQuantity(item.product_id, item.quantity - 1)}
                                                     disabled={item.quantity <= 1}
                                                 >
                                                     <Minus className="w-4 h-4" />
@@ -117,18 +135,12 @@ const Cart = () => {
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
-                                                    onClick={() =>
-                                                        updateQuantity(
-                                                            item.product_id,
-                                                            item.quantity + 1
-                                                        )
-                                                    }
+                                                    onClick={() => updateQuantity(item.product_id, item.quantity + 1)}
                                                 >
                                                     <Plus className="w-4 h-4" />
                                                 </Button>
                                             </div>
 
-                                            {/* Remove Button */}
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
@@ -139,13 +151,10 @@ const Cart = () => {
                                                 Remove
                                             </Button>
 
-                                            {/* Line Total */}
                                             <div className="text-right mt-2">
                                                 <p className="text-xs text-muted-foreground">Subtotal</p>
                                                 <p className="font-bold text-lg">
-                                                    {formatINR(
-                                                        item.product.price * item.quantity
-                                                    )}
+                                                    {formatINR(item.product.price * item.quantity)}
                                                 </p>
                                             </div>
                                         </div>

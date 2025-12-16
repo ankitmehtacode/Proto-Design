@@ -3,7 +3,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
+import * as dotenv from 'dotenv'; // Changed to namespace import
 import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './src/routes/auth.routes.js';
@@ -29,18 +29,18 @@ const allowedOrigins = [
     'http://localhost:8080',
     'http://localhost:3000',
     'http://127.0.0.1:8080',
-    'http://192.168.29.39:3000',     // ✅ Network frontend
-    'http://192.168.29.39:5173',     // ✅ Network Vite dev
+    'http://192.168.29.39:3000',
+    'http://192.168.29.39:5173',
 ];
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve static uploads
+app.use('/uploads', express.static(path.join(__dirname, 'src/uploads'))); // Adjusted path if uploads are in src/uploads
 
 app.use(cors({
     origin: (origin, callback) => {
-        // ✅ Allow network access in development
         if (process.env.NODE_ENV === 'development' || !origin || allowedOrigins.includes(origin)) {
             return callback(null, true);
         }
@@ -79,7 +79,6 @@ app.get('/api/health', (req, res) => {
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || 'development',
         uptime: process.uptime(),
-        networkIP: 'http://192.168.29.39:3001',  // ✅ Your IP
         clientIP: req.ip
     });
 });
@@ -115,11 +114,11 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // ============================================
-// SERVER STARTUP - NETWORK READY
+// SERVER STARTUP
 // ============================================
 
 const PORT = Number(process.env.PORT || 3001);
-const HOST = process.env.HOST || '0.0.0.0';  // ✅ Bind to ALL network interfaces
+const HOST = process.env.HOST || '0.0.0.0';
 
 const server = app.listen(PORT, HOST, () => {
     console.log(`
@@ -128,19 +127,9 @@ const server = app.listen(PORT, HOST, () => {
 ╠══════════════════════════════════════════════╣
 ║ ✅ Server running on port: ${PORT}
 ║ ✅ Local:          http://localhost:${PORT}
-║ ✅ Network (Phone): http://192.168.29.39:${PORT}
+║ ✅ Network:        http://${HOST}:${PORT}
 ║ 🔧 Environment:    ${process.env.NODE_ENV || 'development'}
-║ 📊 Database:       ${process.env.DB_NAME}@${process.env.DB_HOST}:${process.env.DB_PORT}
 ╚══════════════════════════════════════════════╝
-
-📱 PHONE/TABLET ACCESS (Same WiFi):
-   Frontend: http://192.168.29.39:3000
-   Backend:  http://192.168.29.39:${PORT}/api
-
-🔗 Test Endpoints:
-   Health:    GET  http://192.168.29.39:${PORT}/api/health
-   Products:  GET  http://192.168.29.39:${PORT}/api/products
-   Cart:      GET  http://192.168.29.39:${PORT}/api/cart (after login)
     `);
 });
 

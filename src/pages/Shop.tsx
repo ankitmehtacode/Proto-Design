@@ -1,4 +1,3 @@
-// src/pages/Shop.tsx
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -16,7 +15,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Loader2, ShoppingCart, Search } from 'lucide-react';
-import { formatINR } from '@/lib/currency';
 import { apiService } from '@/services/api.service';
 import { useCart } from '@/contexts/CartContext';
 import ProductImageCarousel from '@/components/ProductImageCarousel';
@@ -33,8 +31,8 @@ interface Product {
     name: string;
     description: string;
     price: number;
-    stock: number
-    likes_count: number;           // 🔥 NEW: Like count from database
+    stock: number;
+    likes_count: number;
     image_url: string | null;
     category: string;
     product_images?: ProductImage[];
@@ -54,15 +52,12 @@ const Shop = () => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [loadingLikes, setLoadingLikes] = useState(false);
 
-
     useEffect(() => {
         const initLikes = async () => {
             try {
-                // Check auth
                 await apiService.getCurrentUser();
                 setIsAuthenticated(true);
 
-                // Load likes for visible products (first 9 for performance)
                 const firstProducts = products.slice(0, 9);
                 const likesData = await Promise.allSettled(
                     firstProducts.map(product => apiService.isProductLiked(product.id))
@@ -94,7 +89,8 @@ const Shop = () => {
         }
     }, [products]);
 
-    const handleLikeToggle = async (productId: string) => {
+    const handleLikeToggle = async (productId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
         if (!isAuthenticated) {
             toast.error('Please sign in to like products');
             navigate('/auth');
@@ -104,7 +100,6 @@ const Shop = () => {
         setLoadingLikes(true);
         try {
             if (isLiked[productId]) {
-                // Unlike
                 await apiService.unlikeProduct(productId);
                 setIsLiked(prev => ({ ...prev, [productId]: false }));
                 setLikesCounts(prev => ({
@@ -113,7 +108,6 @@ const Shop = () => {
                 }));
                 toast.success('Unliked!');
             } else {
-                // Like
                 await apiService.likeProduct(productId);
                 setIsLiked(prev => ({ ...prev, [productId]: true }));
                 setLikesCounts(prev => ({
@@ -128,7 +122,6 @@ const Shop = () => {
             setLoadingLikes(false);
         }
     };
-
 
     useEffect(() => {
         fetchProducts();
@@ -166,7 +159,8 @@ const Shop = () => {
         setFilteredProducts(filtered);
     }, [category, searchTerm, products]);
 
-    const handleAddToCart = async (product: Product) => {
+    const handleAddToCart = async (product: Product, e: React.MouseEvent) => {
+        e.stopPropagation();
         try {
             if (!apiService.isAuthenticated()) {
                 toast.error('Please sign in to add items to cart');
@@ -179,6 +173,13 @@ const Shop = () => {
         } catch (error: any) {
             toast.error('Failed to add to cart');
         }
+    };
+
+    const formatPrice = (price: number) => {
+        return new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+        }).format(price);
     };
 
     if (loading) {
@@ -257,8 +258,10 @@ const Shop = () => {
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ duration: 0.6, delay: index * 0.1 }}
                                     >
-                                        <Card className="flex flex-col overflow-hidden hover:shadow-glow transition-all h-full group cursor-pointer">
-                                            {/* Image Carousel */}
+                                        <Card
+                                            onClick={() => navigate(`/product/${product.id}`)}
+                                            className="flex flex-col overflow-hidden hover:shadow-glow transition-all h-full group cursor-pointer"
+                                        >
                                             <div className="relative p-4 bg-muted/50">
                                                 <ProductImageCarousel
                                                     images={images.length > 0 ? images : [{ id: '0', image_url: product.image_url || '', display_order: 0 }]}
@@ -266,7 +269,6 @@ const Shop = () => {
                                                 />
                                             </div>
 
-                                            {/* Product Info */}
                                             <CardHeader>
                                                 <div className="flex items-start justify-between mb-2">
                                                     <CardTitle className="text-lg">{product.name}</CardTitle>
@@ -281,18 +283,13 @@ const Shop = () => {
 
                                             <CardContent className="flex-1 flex flex-col">
                                                 <div className="mb-4 flex-1">
-                                                    <p className="text-2xl font-bold text-primary">{(product.price)}</p>
-
+                                                    <p className="text-2xl font-bold text-primary">{formatPrice(product.price)}</p>
                                                 </div>
 
-                                                {/* 🔥 LIKE BUTTON WITH COUNT */}
                                                 <div className="flex items-center justify-between mb-4">
                                                     <div className="flex items-center gap-2">
                                                         <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation(); // Prevent card click
-                                                                handleLikeToggle(product.id);
-                                                            }}
+                                                            onClick={(e) => handleLikeToggle(product.id, e)}
                                                             disabled={!isAuthenticated || loadingLikes}
                                                             className={`p-2 rounded-full flex items-center gap-1 transition-all duration-200 ${
                                                                 isLiked[product.id]
@@ -304,8 +301,8 @@ const Shop = () => {
                                                                 className={`h-4 w-4 transition-all ${isLiked[product.id] ? 'fill-current' : ''}`}
                                                             />
                                                             <span className="text-xs font-semibold">
-            {likesCounts[product.id] || product.likes_count || 0}
-          </span>
+                                                                {likesCounts[product.id] || product.likes_count || 0}
+                                                            </span>
                                                         </button>
                                                     </div>
 
@@ -314,7 +311,7 @@ const Shop = () => {
                                                     </p>
                                                 </div>
                                                 <Button
-                                                    onClick={() => handleAddToCart(product)}
+                                                    onClick={(e) => handleAddToCart(product, e)}
                                                     disabled={product.stock === 0}
                                                     className="w-full"
                                                 >
