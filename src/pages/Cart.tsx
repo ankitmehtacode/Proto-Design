@@ -19,6 +19,12 @@ const Cart = () => {
         }
     }, []);
 
+    // ✅ Match Checkout Logic
+    const subtotal = total;
+    const gst = total * 0.18;
+    const shipping = 50;
+    const finalTotal = subtotal + gst + shipping;
+
     if (loading) {
         return (
             <div className="min-h-screen pt-20 pb-10 flex items-center justify-center">
@@ -174,21 +180,21 @@ const Cart = () => {
                                 <div className="space-y-2">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Subtotal:</span>
-                                        <span>{formatINR(total)}</span>
+                                        <span>{formatINR(subtotal)}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-muted-foreground">Shipping:</span>
-                                        <span>Free</span>
+                                        <span className="text-muted-foreground">Shipping (Est.):</span>
+                                        <span>{formatINR(shipping)}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-muted-foreground">Tax:</span>
-                                        <span>{formatINR(0)}</span>
+                                        <span className="text-muted-foreground">GST (18%):</span>
+                                        <span>{formatINR(gst)}</span>
                                     </div>
                                 </div>
                                 <Separator />
                                 <div className="flex justify-between font-bold text-lg">
                                     <span>Total:</span>
-                                    <span className="text-primary">{formatINR(total)}</span>
+                                    <span className="text-primary">{formatINR(finalTotal)}</span>
                                 </div>
                                 <Button
                                     className="w-full"

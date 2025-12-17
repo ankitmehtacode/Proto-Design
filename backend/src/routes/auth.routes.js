@@ -150,4 +150,32 @@ router.post('/signup', async (req, res, next) => {
         }
     );
 
+// Add these routes before "export default router;"
+
+/**
+ * POST /api/auth/forgot-password
+ */
+router.post('/forgot-password', async (req, res, next) => {
+    try {
+        const { email } = req.body;
+        await authService.forgotPassword(email);
+        res.json({ message: 'If that email exists, a reset link has been sent.' });
+    } catch (error) {
+        next(error);
+    }
+});
+
+/**
+ * POST /api/auth/reset-password
+ */
+router.post('/reset-password', async (req, res, next) => {
+    try {
+        const { token, newPassword } = req.body;
+        await authService.resetPassword(token, newPassword);
+        res.json({ message: 'Password has been reset successfully. Please login.' });
+    } catch (error) {
+        next(error);
+    }
+});
+
 export default router;

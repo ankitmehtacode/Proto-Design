@@ -61,6 +61,8 @@ interface ShippingAddress {
 interface Order {
     id: string;
     total_amount: number;
+    tax_amount?: number;       // ✅ Add this
+    shipping_amount?: number;
     status: string;
     created_at: string;
     items: OrderItem[];
@@ -115,31 +117,19 @@ export default function Orders() {
         try {
             if (!apiService.isAuthenticated()) { navigate("/auth"); return; }
             setLoading(true);
+
             const res = await apiService.getOrders();
+            // The backend now returns the perfect structure, no mapping needed!
             const rawOrders = Array.isArray(res) ? res : (res.data || []);
 
-            // ADAPTER: Format old backend data to match new UI
-            const formattedOrders = rawOrders.map((o: any) => {
-                const rawItems = o.items || [];
 
-                // Map the nested 'product' object to top-level fields the UI expects
-                const uiItems = rawItems.map((i: any) => ({
-                    ...i,
-                    product_name: i.product?.name || "Unknown Product",
-                    product_image: i.product?.image_url,
-                    product_price: i.product?.price,
-                    // If line_total is missing, calculate it
-                    line_total: i.line_total || ((i.product?.price || 0) * i.quantity)
-                }));
+            // Just calculate total_quantity if missing
+            const finalOrders = rawOrders.map((o: any) => ({
+                ...o,
+                total_quantity: o.items.reduce((sum: number, i: any) => sum + i.quantity, 0)
+            }));
 
-                return {
-                    ...o,
-                    items: uiItems,
-                    total_quantity: o.total_quantity || uiItems.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0)
-                };
-            });
-
-            setOrders(formattedOrders);
+            setOrders(finalOrders);
         } catch (error: any) {
             console.error("Fetch orders error:", error);
             if (error.message?.includes('401')) {
@@ -368,7 +358,9 @@ export default function Orders() {
                                                 <div className="grid gap-3">
                                                     {order.items.map((item, idx) => (
                                                         <div key={idx} className="flex justify-between items-center p-3 bg-background border rounded-lg hover:border-primary/30 transition-colors">
+                                                            {/* ... existing item render ... */}
                                                             <div className="flex items-center gap-4">
+                                                                {/* ... image and name ... */}
                                                                 <div className="h-12 w-12 rounded-md bg-muted overflow-hidden border">
                                                                     {item.product_image ? (
                                                                         <img src={item.product_image} alt="" className="w-full h-full object-cover" />
@@ -384,6 +376,22 @@ export default function Orders() {
                                                             <span className="font-bold text-sm">{formatINR(item.line_total)}</span>
                                                         </div>
                                                     ))}
+
+                                                    {/* ✅ NEW: Shipping and GST Rows */}
+                                                    <div className="flex justify-between items-center p-3 bg-muted/30 border border-dashed rounded-lg">
+                                                        <span className="text-sm font-medium text-muted-foreground">Shipping Fee</span>
+                                                        <span className="font-bold text-sm">{formatINR(order.shipping_amount || 0)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center p-3 bg-muted/30 border border-dashed rounded-lg">
+                                                        <span className="text-sm font-medium text-muted-foreground">GST (18%)</span>
+                                                        <span className="font-bold text-sm">{formatINR(order.tax_amount || 0)}</span>
+                                                    </div>
+
+                                                    {/* Total Row */}
+                                                    <div className="flex justify-between items-center p-3 bg-primary/5 border border-primary/20 rounded-lg mt-2">
+                                                        <span className="text-sm font-bold text-primary">Total Paid</span>
+                                                        <span className="font-bold text-lg text-primary">{formatINR(order.total_amount)}</span>
+                                                    </div>
                                                 </div>
                                             </div>
 

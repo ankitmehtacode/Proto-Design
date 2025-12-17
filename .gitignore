@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+# Security - Ignore environment variables
+.env
+.env.production
+backend/.env

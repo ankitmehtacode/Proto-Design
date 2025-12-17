@@ -27,6 +27,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.0.2",
+    "nodemailer": "^7.0.11",
     "pg": "^8.11.0",
     "pg-promise": "^12.3.0"
   },
@@ -39,8 +40,8 @@
     "@types/pg": "^8.15.6",
     "@types/pg-promise": "^0.0.28",
     "cross-env": "^7.0.3",
-    "tsx": "^4.19.1",
     "ts-node": "^10.9.0",
+    "tsx": "^4.19.1",
     "typescript": "^5.2.0"
   }
 }

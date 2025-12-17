@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS product_images CASCADE;
 DROP TABLE IF EXISTS reference_images CASCADE;
 DROP TABLE IF EXISTS cart_items CASCADE;
 DROP TABLE IF EXISTS carts CASCADE;
+DROP TABLE IF EXISTS order_items CASCADE;
 DROP TABLE IF EXISTS orders CASCADE;
 DROP TABLE IF EXISTS products CASCADE;
 DROP TABLE IF EXISTS user_roles CASCADE;
@@ -90,19 +91,35 @@ CREATE TABLE cart_items (
                             UNIQUE(cart_id, product_id)
 );
 
--- Create orders table
+-- 1. Create the Parent Order Table
 CREATE TABLE orders (
                         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                        product_id UUID REFERENCES products(id) ON DELETE SET NULL,
-                        quantity INTEGER NOT NULL DEFAULT 1,
-                        total_amount DECIMAL(10,2) NOT NULL,
-                        status TEXT DEFAULT 'pending',
-                        shipping_address JSONB,
-                        payment_gateway TEXT,
-                        created_at TIMESTAMP DEFAULT now(),
-                        updated_at TIMESTAMP DEFAULT now()
+
+    -- Financials
+                        subtotal_amount DECIMAL(10,2) NOT NULL,
+                        tax_amount DECIMAL(10,2) NOT NULL,       -- GST
+                        shipping_amount DECIMAL(10,2) NOT NULL,
+                        total_amount DECIMAL(10,2) NOT NULL,     -- The final amount the user paid
+
+                        status VARCHAR(50) DEFAULT 'pending',
+                        payment_gateway VARCHAR(50) DEFAULT 'razorpay',
+                        shipping_address JSONB,                  -- Stores full address snapshot
+
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 2. Create the Child Items Table
+CREATE TABLE order_items (
+                             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                             order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
+                             product_id UUID REFERENCES products(id),
+
+                             quantity INTEGER NOT NULL DEFAULT 1,
+                             price DECIMAL(10,2) NOT NULL,            -- Price at the time of purchase
+                             line_total DECIMAL(10,2) NOT NULL        -- price * quantity
+)
 
 -- Create reference_images table
 CREATE TABLE reference_images (

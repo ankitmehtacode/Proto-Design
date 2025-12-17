@@ -43,25 +43,25 @@ export const Navigation = () => {
             // Verify session and get user info
             const userInfo = await apiService.getCurrentUser();
 
-            let fullName =
-                userInfo.user?.email?.split("@")[0];
+            // ✅ FIXED: Prioritize real name, fallback to email if name is missing
+            let fullName = userInfo.user?.fullName || userInfo.user?.email?.split("@")[0];
 
             if (fullName) {
+                // Capitalize first letter if it looks like a lowercase string
                 fullName = fullName.charAt(0).toUpperCase() + fullName.slice(1);
             }
 
             setUser({
                 id: userInfo.id || userInfo.user?.id || '',
                 email: userInfo.user?.email || '',
-                name: fullName,
+                name: fullName, // Now uses the correct name
                 role: userInfo.role || userInfo.user?.role,
             });
 
-            // Check if admin
             setIsAdmin(userInfo.role === 'admin' || userInfo.user?.role === 'admin');
         } catch (error) {
             console.error('Auth check failed:', error);
-            apiService.clearToken(); // Clear invalid token
+            apiService.clearToken();
             setUser(null);
             setIsAdmin(false);
         }

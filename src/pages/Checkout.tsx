@@ -12,6 +12,23 @@ import { formatINR } from '@/lib/currency';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { apiService } from '@/services/api.service';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"; // ✅ Make sure you have this UI component
+
+const INDIAN_STATES = [
+    "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam",
+    "Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli", "Daman and Diu",
+    "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir",
+    "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh",
+    "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha",
+    "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana",
+    "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal"
+];
 
 const Checkout = () => {
     const navigate = useNavigate();
@@ -32,17 +49,16 @@ const Checkout = () => {
 
     const subtotal = total;
     const gst = total * 0.18;
-    const shipping = 500; // Fixed shipping for now
+    const shipping = 50;
     const finalTotal = subtotal + gst + shipping;
 
-    // ✅ redirect logic in effect (avoids setState during render warning)
     useEffect(() => {
         if (!apiService.isAuthenticated()) {
             toast.error('Please log in to place an order');
             navigate('/auth');
             return;
         }
-        if (items.length === 0) {
+            if (items.length === 0) {
             navigate('/cart');
         }
     }, [items.length, navigate]);
@@ -53,38 +69,64 @@ const Checkout = () => {
         setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     };
 
-    const handlePlaceOrder = async () => {
-        if (!formData.fullName || !formData.email || !formData.phone || !formData.address) {
+    const handleStateChange = (value: string) => {
+        setFormData((prev) => ({ ...prev, state: value }));
+    };
+
+    // ✅ NEW: Validation Function
+    const validateForm = () => {
+        // 1. Empty Fields
+        if (!formData.fullName || !formData.email || !formData.phone || !formData.address || !formData.pincode || !formData.city || !formData.state) {
             toast.error('Please fill in all required fields');
-            return;
+            return false;
         }
 
+        // 2. Email Validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+            toast.error('Please enter a valid email address');
+            return false;
+        }
+
+        // 3. Phone Validation (Indian: starts with 6-9, 10 digits)
+        const phoneRegex = /^[6-9]\d{9}$/;
+        if (!phoneRegex.test(formData.phone)) {
+            toast.error('Please enter a valid 10-digit Indian phone number');
+            return false;
+        }
+
+        // 4. Pincode Validation (6 digits, strictly numeric)
+        const pincodeRegex = /^[1-9][0-9]{5}$/;
+        if (!pincodeRegex.test(formData.pincode)) {
+            toast.error('Please enter a valid 6-digit Pincode');
+            return false;
+        }
+
+        return true;
+    };
+
+    const handlePlaceOrder = async () => {
+        if (!validateForm()) return;
         setLoading(true);
 
         try {
-            // still verify session
             await apiService.getCurrentUser();
-
-            if (!apiService.isAuthenticated()) {
-                toast.error('Please log in to place an order');
-                navigate('/auth');
-                return;
-            }
 
             const orderItems = items.map((item) => ({
                 product_id: item.product_id,
                 quantity: item.quantity,
             }));
 
+            // ✅ Pass 'shipping' as the 5th argument
             await apiService.createOrder(
                 orderItems,
                 finalTotal,
                 formData,
-                selectedGateway
+                selectedGateway,
+                shipping
             );
 
             toast.success('Order placed successfully! Redirecting...');
-
             await clearCart();
             setTimeout(() => {
                 navigate('/orders');
@@ -105,7 +147,6 @@ const Checkout = () => {
                 <div className="grid lg:grid-cols-3 gap-8">
                     {/* Checkout Form */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Shipping Details */}
                         <Card className="p-6">
                             <h2 className="text-2xl font-semibold mb-4">Shipping Details</h2>
                             <div className="grid md:grid-cols-2 gap-4">
@@ -127,19 +168,28 @@ const Checkout = () => {
                                         type="email"
                                         value={formData.email}
                                         onChange={handleInputChange}
+                                        placeholder="john@example.com"
                                         required
                                     />
                                 </div>
                                 <div>
                                     <Label htmlFor="phone">Phone Number *</Label>
-                                    <Input
-                                        id="phone"
-                                        name="phone"
-                                        type="tel"
-                                        value={formData.phone}
-                                        onChange={handleInputChange}
-                                        required
-                                    />
+                                    <div className="flex">
+                                        <span className="inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm">
+                                            +91
+                                        </span>
+                                        <Input
+                                            id="phone"
+                                            name="phone"
+                                            type="tel"
+                                            value={formData.phone}
+                                            onChange={handleInputChange}
+                                            placeholder="9876543210"
+                                            className="rounded-l-none"
+                                            required
+                                            maxLength={10}
+                                        />
+                                    </div>
                                 </div>
                                 <div>
                                     <Label htmlFor="pincode">Pincode *</Label>
@@ -148,6 +198,8 @@ const Checkout = () => {
                                         name="pincode"
                                         value={formData.pincode}
                                         onChange={handleInputChange}
+                                        placeholder="110001"
+                                        maxLength={6}
                                         required
                                     />
                                 </div>
@@ -159,6 +211,7 @@ const Checkout = () => {
                                         value={formData.address}
                                         onChange={handleInputChange}
                                         rows={3}
+                                        placeholder="House No, Street, Landmark"
                                         required
                                     />
                                 </div>
@@ -173,14 +226,20 @@ const Checkout = () => {
                                     />
                                 </div>
                                 <div>
+                                    {/* ✅ CHANGED: State Dropdown */}
                                     <Label htmlFor="state">State *</Label>
-                                    <Input
-                                        id="state"
-                                        name="state"
-                                        value={formData.state}
-                                        onChange={handleInputChange}
-                                        required
-                                    />
+                                    <Select onValueChange={handleStateChange} value={formData.state}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select State" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {INDIAN_STATES.map((state) => (
+                                                <SelectItem key={state} value={state}>
+                                                    {state}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                                 <div className="md:col-span-2">
                                     <Label htmlFor="notes">Order Notes (Optional)</Label>
@@ -190,13 +249,11 @@ const Checkout = () => {
                                         value={formData.notes}
                                         onChange={handleInputChange}
                                         rows={2}
-                                        placeholder="Any special instructions for your order"
                                     />
                                 </div>
                             </div>
                         </Card>
 
-                        {/* Payment Method */}
                         <Card className="p-6">
                             <PaymentGatewaySelector
                                 amount={finalTotal}
@@ -215,9 +272,7 @@ const Checkout = () => {
                             <div className="space-y-3 mb-4">
                                 {items.map((item) => (
                                     <div key={item.product_id} className="flex justify-between text-sm">
-                    <span>
-                      {item.product.name} × {item.quantity}
-                    </span>
+                                        <span>{item.product.name} × {item.quantity}</span>
                                         <span>{formatINR(item.product.price * item.quantity)}</span>
                                     </div>
                                 ))}
@@ -231,7 +286,7 @@ const Checkout = () => {
                                     <span>{formatINR(subtotal)}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span>Shipping</span>
+                                    <span>Shipping (Standard)</span>
                                     <span>{formatINR(shipping)}</span>
                                 </div>
                                 <div className="flex justify-between">

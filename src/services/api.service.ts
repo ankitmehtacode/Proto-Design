@@ -1,6 +1,6 @@
 // src/services/api.service.ts
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+const API_URL = "/api";
 
 interface RequestOptions extends RequestInit {
     skipAuth?: boolean;
@@ -230,19 +230,15 @@ class ApiService {
         return this.request(`/orders/${id}`, { method: "GET" });
     }
 
-    async createOrder(
-        items: any[],
-        totalAmount: number,
-        shippingAddress: any,
-        paymentGateway: string
-    ) {
-        return this.request("/orders", {
-            method: "POST",
+    async createOrder(items: any[], totalAmount: number, shippingAddress: any, paymentGateway: string, shippingAmount: number) {
+        return this.request('/orders', {
+            method: 'POST',
             body: JSON.stringify({
                 items,
                 totalAmount,
                 shippingAddress,
                 paymentGateway,
+                shippingAmount // ✅ Sending this to backend
             }),
         });
     }
@@ -294,6 +290,33 @@ class ApiService {
 
     async unlikeProduct(productId: string) {
         return this.request(`/products/${productId}/like`, { method: 'DELETE' });
+    }
+
+    async forgotPassword(email: string) {
+        return this.request("/auth/forgot-password", {
+            method: "POST",
+            body: JSON.stringify({ email }),
+            skipAuth: true,
+        });
+    }
+
+    async resetPassword(token: string, newPassword: string) {
+        return this.request("/auth/reset-password", {
+            method: "POST",
+            body: JSON.stringify({ token, newPassword }),
+            skipAuth: true,
+        });
+    }
+
+    async sendQuoteRequest(formData: FormData) {
+        // Note: When sending FormData, DO NOT set Content-Type header manually
+        // The browser sets it automatically with the boundary
+        return this.request("/quotes/request", {
+            method: "POST",
+            body: formData,
+            // Custom option to tell our request helper NOT to enforce JSON
+            // You might need to adjust your buildHeaders method to handle FormData check
+        });
     }
 
 }

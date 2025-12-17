@@ -104,6 +104,8 @@
     interface Order {
         id: string;
         total_amount: number;
+        tax_amount?: number;       // ✅ Add this
+        shipping_amount?: number;
         status: string;
         created_at: string;
         total_quantity: number;
@@ -1057,6 +1059,20 @@
                                                                     <p className="font-semibold">{formatINR(item.line_total || 0)}</p>
                                                                 </div>
                                                             ))}
+
+                                                            {/* ✅ NEW: Extra Rows */}
+                                                            <div className="flex justify-between p-2 px-3 text-sm border-t border-dashed mt-2">
+                                                                <span className="text-muted-foreground">Shipping</span>
+                                                                <span>{formatINR(order.shipping_amount || 0)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between p-2 px-3 text-sm border-t border-dashed">
+                                                                <span className="text-muted-foreground">GST</span>
+                                                                <span>{formatINR(order.tax_amount || 0)}</span>
+                                                            </div>
+                                                            <div className="flex justify-between p-3 bg-primary/10 rounded font-bold mt-2">
+                                                                <span>Total</span>
+                                                                <span>{formatINR(order.total_amount)}</span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>

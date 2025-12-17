@@ -1,6 +1,9 @@
-    import db from '../config/database.js';
+import db from '../config/database.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto'; // Built-in Node module
+import { emailService } from './email.service.js'; // Import the new service
+
 
 // Authentication service
 export const authService = {
@@ -13,36 +16,29 @@ export const authService = {
             throw new Error('Email, password, and full name are required');
         }
 
-        if (password.length < 6) {
-            throw new Error('Password must be at least 6 characters');
+        if (password.length < 8) {
+            throw new Error('Password must be at least 8 characters');
         }
 
         // Check if user already exists
-        const existing = await db.oneOrNone(
-            'SELECT id FROM users WHERE email = $1',
-            [email.toLowerCase()]
-        );
+        const existing = await db.oneOrNone('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+        if (existing) throw new Error('Email already registered');
 
-        if (existing) {
-            throw new Error('Email already registered');
-        }
-
-        // Hash password (10 salt rounds)
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Create user in database
         const user = await db.one(
             `INSERT INTO users (email, password_hash, full_name)
-       VALUES ($1, $2, $3)
-       RETURNING id, email, full_name, created_at`,
+             VALUES ($1, $2, $3)
+                 RETURNING id, email, full_name, created_at`,
             [email.toLowerCase(), hashedPassword, fullName]
         );
 
-        // Assign default 'user' role
-        await db.none(
-            'INSERT INTO user_roles (user_id, role) VALUES ($1, $2)',
-            [user.id, 'user']
-        );
+        await db.none('INSERT INTO user_roles (user_id, role) VALUES ($1, $2)', [user.id, 'user']);
+
+        // ✅ NEW: Send Welcome Email asynchronously (don't await strictly if you want speed)
+        emailService.sendWelcomeEmail(user.email, user.full_name)
+            .catch(err => console.error("Failed to send welcome email:", err));
+
 
         // Generate JWT token
         const jwtSecret = process.env.JWT_SECRET;
@@ -75,6 +71,56 @@ export const authService = {
             token,
             role: 'user'
         };
+    },
+
+
+    // ✅ NEW: Forgot Password
+    async forgotPassword(email) {
+        const user = await db.oneOrNone('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+        if (!user) throw new Error('User not found');
+
+        // Generate random token
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const tokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
+
+        // Save token to DB
+        await db.none(
+            'UPDATE users SET reset_password_token = $1, reset_password_expires = $2 WHERE id = $3',
+            [resetToken, tokenExpiry, user.id]
+        );
+
+        // Send Email
+        await emailService.sendPasswordResetEmail(email, resetToken);
+
+        return { message: 'Password reset email sent' };
+    },
+
+    // ✅ NEW: Reset Password
+    async resetPassword(token, newPassword) {
+        if (!token || !newPassword) throw new Error('Missing token or password');
+
+        // Find user with valid token
+        const user = await db.oneOrNone(
+            `SELECT id FROM users
+             WHERE reset_password_token = $1
+               AND reset_password_expires > NOW()`,
+            [token]
+        );
+
+        if (!user) throw new Error('Invalid or expired token');
+
+        // Hash new password
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // Update password and clear token
+        await db.none(
+            `UPDATE users
+             SET password_hash = $1, reset_password_token = NULL, reset_password_expires = NULL
+             WHERE id = $2`,
+            [hashedPassword, user.id]
+        );
+
+        return { message: 'Password successfully reset' };
     },
 
     /**
@@ -197,8 +243,8 @@ export const authService = {
             throw new Error('Both old and new passwords are required');
         }
 
-        if (newPassword.length < 6) {
-            throw new Error('New password must be at least 6 characters');
+        if (newPassword.length < 8) {
+            throw new Error('New password must be at least 8 characters');
         }
 
         // Get current password hash

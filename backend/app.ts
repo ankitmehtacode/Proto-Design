@@ -1,19 +1,21 @@
 // app.ts
 
+import 'dotenv/config';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import * as dotenv from 'dotenv'; // Changed to namespace import
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+// Now it is safe to import routes
 import authRoutes from './src/routes/auth.routes.js';
 import productsRoutes from './src/routes/products.routes.js';
 import ordersRoutes from './src/routes/orders.routes.js';
 import cartRoutes from './src/routes/cart.routes.js';
+import quotesRoutes from './src/routes/quotes.routes.js';
 import errorHandler from './src/middleware/errorHandler.js';
 
-// Load environment variables
-dotenv.config();
 
 // Create Express app
 const app = express();
@@ -33,22 +35,27 @@ const allowedOrigins = [
     'http://192.168.29.39:5173',
 ];
 
+// ============================================
+// STATIC FILES
+// ============================================
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve static uploads
-app.use('/uploads', express.static(path.join(__dirname, 'src/uploads'))); // Adjusted path if uploads are in src/uploads
+app.use('/uploads', express.static(path.join(__dirname, 'src/uploads')));
+
 
 app.use(cors({
     origin: (origin, callback) => {
-        if (process.env.NODE_ENV === 'development' || !origin || allowedOrigins.includes(origin)) {
+        if (!origin) return callback(null, true);
+        if (process.env.NODE_ENV === 'development' || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.') || origin.startsWith('http://10.') || origin.startsWith('http://localhost')) {
             return callback(null, true);
         }
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // ============================================
@@ -95,6 +102,8 @@ app.use('/api/orders', ordersRoutes);
 // Cart routes
 app.use('/api/cart', cartRoutes);
 
+app.use('/api/quotes', quotesRoutes);
+
 // ============================================
 // 404 HANDLER
 // ============================================
@@ -106,6 +115,8 @@ app.use((req, res) => {
         method: req.method
     });
 });
+
+
 
 // ============================================
 // ERROR HANDLER (MUST BE LAST)
@@ -132,6 +143,7 @@ const server = app.listen(PORT, HOST, () => {
 ╚══════════════════════════════════════════════╝
     `);
 });
+
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

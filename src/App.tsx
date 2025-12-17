@@ -16,6 +16,8 @@ import Cart from "./pages/Cart";
 import Checkout from "./pages/Checkout";
 import Orders from "./pages/Orders";
 import NotFound from "./pages/NotFound";
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 const queryClient = new QueryClient();
 
@@ -102,6 +104,8 @@ const App = () => (
                         <Route path="/checkout" element={<Checkout />} />
                         <Route path="/orders" element={<Orders />} />
                         <Route path="/auth" element={<Auth />} />
+                        <Route path="/forgot-password" element={<ForgotPassword />} />
+                        <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/admin" element={<AdminDashboard />} />
                         <Route path="*" element={<NotFound />} />
                     </Routes>
