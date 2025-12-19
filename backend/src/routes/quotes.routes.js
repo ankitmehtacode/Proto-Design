@@ -30,7 +30,8 @@ router.get('/my', authMiddleware, async (req, res) => {
     }
 });
 
-router.post('/request', upload.single('file'), async (req, res) => {
+// ✅ POST REQUEST (Protected: Requires Login)
+router.post('/request', authMiddleware, upload.single('file'), async (req, res) => {
     try {
         const { email, phone, notes, specifications } = req.body;
         const file = req.file;
@@ -50,31 +51,16 @@ router.post('/request', upload.single('file'), async (req, res) => {
         }
 
         const estPrice = specs.estimatedPrice || 0;
-
-        // 3. Insert into DB
-        await db.none(`
-            INSERT INTO quotes (email, phone, file_url, file_name, specifications, estimated_price, admin_notes, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-        `, [email, phone, fileUrl, file.originalname, specs, estPrice, notes]);
-
         const modelStats = specs.originalStats || {};
         const printDims = specs.printDimensions || {};
 
-        // C. Save to Database
+        // 3. Insert into DB (LINK TO LOGGED IN USER: req.userId)
         await db.none(`
-            INSERT INTO quotes (email, phone, file_url, file_name, specifications, estimated_price, admin_notes, status)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-        `, [
-            email,
-            phone,
-            fileUrl,
-            file.originalname,
-            specs,
-            specs.estimatedPrice || 0,
-            notes
-        ]);
+            INSERT INTO quotes (user_id, email, phone, file_url, file_name, specifications, estimated_price, admin_notes, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+        `, [req.userId, email, phone, fileUrl, file.originalname, specs, estPrice, notes]);
 
-        // D. Prepare Email Content (The "Dark Theme" Format)
+        // 4. Prepare Email Content (The "Dark Theme" Format)
         const adminHtml = `
             <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 1px solid #1e293b; max-width: 600px; margin: 0 auto; border-radius: 8px; overflow: hidden; background-color: #0f172a; color: #e2e8f0;">
                 
@@ -86,6 +72,7 @@ router.post('/request', upload.single('file'), async (req, res) => {
                     
                     <div style="background: #1e293b; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
                         <h3 style="margin-top: 0; color: #93c5fd; font-size: 16px; margin-bottom: 10px;">👤 Customer Details</h3>
+                        <p style="margin: 5px 0; color: #cbd5e1;"><strong>User ID:</strong> ${req.userId}</p>
                         <p style="margin: 5px 0; color: #cbd5e1;"><strong>Email:</strong> <a href="mailto:${email}" style="color: #60a5fa;">${email}</a></p>
                         <p style="margin: 5px 0; color: #cbd5e1;"><strong>Phone:</strong> ${phone}</p>
                     </div>
@@ -140,15 +127,14 @@ router.post('/request', upload.single('file'), async (req, res) => {
         `;
 
         // ----------------------------------------------------
-        // E. Send Admin Email
+        // 5. Send Admin Email
         // ----------------------------------------------------
         try {
             await transporter.sendMail({
                 from: `"ProtoDesign System" <${process.env.EMAIL_USER}>`,
-                to: 'protodesign137@gmail.com', // Your Admin Email
+                to: 'protodesign137@gmail.com',
                 subject: `New Request: ${file.originalname} - ₹${specs.estimatedPrice}`,
                 html: adminHtml,
-                // Optional: Attach file if small enough (<10MB), otherwise rely on link
                 attachments: file.size < 10 * 1024 * 1024 ? [{
                     filename: file.originalname,
                     content: file.buffer
@@ -160,7 +146,7 @@ router.post('/request', upload.single('file'), async (req, res) => {
         }
 
         // ----------------------------------------------------
-        // F. Send Customer Confirmation Email
+        // 6. Send Customer Confirmation Email (To the entered email)
         // ----------------------------------------------------
         try {
             const customerHtml = `
@@ -180,7 +166,7 @@ router.post('/request', upload.single('file'), async (req, res) => {
 
             await transporter.sendMail({
                 from: `"ProtoDesign" <${process.env.EMAIL_USER}>`,
-                to: email,
+                to: email, // This is Y@gmail.com
                 subject: `Order Received: ${file.originalname}`,
                 html: customerHtml
             });

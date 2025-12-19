@@ -23,10 +23,14 @@ router.get('/profile', authMiddleware, async (req, res, next) => {
 router.put('/profile', authMiddleware, async (req, res, next) => {
     try {
         // Handle camelCase from Frontend -> snake_case for DB
-        const fullName = req.body.fullName || req.body.full_name;
-        const phoneNumber = req.body.phoneNumber || req.body.phone_number;
-        const avatarUrl = req.body.avatarUrl || req.body.avatar_url;
+        // If the value is undefined (not sent), we want to keep the old value.
+        // If the value is sent (even as empty string), we update it.
+        const { fullName, phoneNumber, avatarUrl } = req.body;
 
+        // We use COALESCE($1, full_name) in SQL, but if $1 is undefined, pg-promise might complain or treat it as null.
+        // Better strategy: Use dynamic query or pass current values if new ones are undefined.
+
+        // Simpler approach for this specific case:
         const user = await db.one(
             `UPDATE users
              SET full_name = COALESCE($1, full_name),
@@ -34,7 +38,12 @@ router.put('/profile', authMiddleware, async (req, res, next) => {
                  avatar_url = COALESCE($3, avatar_url)
              WHERE id = $4
                  RETURNING id, email, full_name, phone_number, avatar_url`,
-            [fullName, phoneNumber, avatarUrl, req.userId]
+            [
+                fullName !== undefined ? fullName : null,
+                phoneNumber !== undefined ? phoneNumber : null,
+                avatarUrl !== undefined ? avatarUrl : null,
+                req.userId
+            ]
         );
         res.json(user);
     } catch (err) { next(err); }
@@ -51,7 +60,7 @@ router.get('/addresses', authMiddleware, async (req, res, next) => {
 
 router.post('/addresses', authMiddleware, async (req, res, next) => {
     try {
-        const { city, state, pincode, isDefault, label } = req.body;
+        const { city, state, pincode, isDefault, label, email } = req.body;
         // Map Frontend Camel -> DB Snake
         const fullName = req.body.fullName || req.body.full_name;
         const phone = req.body.phone || req.body.phoneNumber;
@@ -62,9 +71,9 @@ router.post('/addresses', authMiddleware, async (req, res, next) => {
         }
 
         const newAddr = await db.one(
-            `INSERT INTO user_addresses (user_id, full_name, phone, address_line1, city, state, pincode, is_default, label)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [req.userId, fullName, phone, addressLine1, city, state, pincode, isDefault || false, label || 'Home']
+            `INSERT INTO user_addresses (user_id, full_name, phone, email, address_line1, city, state, pincode, is_default, label)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+            [req.userId, fullName, phone, email, addressLine1, city, state, pincode, isDefault || false, label || 'Home']
         );
         res.status(201).json(newAddr);
     } catch (err) { next(err); }
@@ -72,7 +81,7 @@ router.post('/addresses', authMiddleware, async (req, res, next) => {
 
 router.put('/addresses/:id', authMiddleware, async (req, res, next) => {
     try {
-        const { city, state, pincode, isDefault, label } = req.body;
+        const { city, state, pincode, isDefault, label, email } = req.body;
         // Map Frontend Camel -> DB Snake
         const fullName = req.body.fullName || req.body.full_name;
         const phone = req.body.phone || req.body.phoneNumber;
@@ -84,10 +93,10 @@ router.put('/addresses/:id', authMiddleware, async (req, res, next) => {
 
         const updated = await db.one(
             `UPDATE user_addresses
-             SET full_name=$1, phone=$2, address_line1=$3, city=$4, state=$5, pincode=$6, is_default=$7, label=$8, updated_at=NOW()
-             WHERE id=$9 AND user_id=$10
+             SET full_name=$1, phone=$2, email=$3, address_line1=$4, city=$5, state=$6, pincode=$7, is_default=$8, label=$9, updated_at=NOW()
+             WHERE id=$10 AND user_id=$11
                  RETURNING *`,
-            [fullName, phone, addressLine1, city, state, pincode, isDefault || false, label || 'Home', req.params.id, req.userId]
+            [fullName, phone, email, addressLine1, city, state, pincode, isDefault || false, label || 'Home', req.params.id, req.userId]
         );
         res.json(updated);
     } catch (err) { next(err); }

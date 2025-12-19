@@ -68,14 +68,24 @@ const Shop = () => {
             try {
                 // Fetch ALL products
                 const res = await apiService.getProducts();
-                const products = res.data || [];
+
+                // ✅ FIX: Handle response whether it is [products] or { data: [products] }
+                const products = Array.isArray(res) ? res : (res.data || []);
+
                 setAllProducts(products);
                 setDisplayedProducts(products);
 
-                try {
-                    await apiService.getCurrentUser();
-                    setIsAuthenticated(true);
-                } catch { setIsAuthenticated(false); }
+                // ✅ FIX: Only check auth if token exists to prevent redirect loop
+                if (apiService.isAuthenticated()) {
+                    try {
+                        await apiService.getCurrentUser();
+                        setIsAuthenticated(true);
+                    } catch {
+                        setIsAuthenticated(false);
+                    }
+                } else {
+                    setIsAuthenticated(false);
+                }
 
             } catch (error) {
                 console.error("Failed to load shop data", error);

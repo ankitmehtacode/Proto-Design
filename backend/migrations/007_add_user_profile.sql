@@ -12,6 +12,7 @@ CREATE TABLE user_addresses (
                                 label VARCHAR(50) DEFAULT 'Home', -- e.g., "Home", "Work"
                                 full_name VARCHAR(255) NOT NULL,
                                 phone VARCHAR(20) NOT NULL,
+                                email VARCHAR(255), -- ✅ Added Email Field
                                 address_line1 TEXT NOT NULL,
                                 city VARCHAR(100) NOT NULL,
                                 state VARCHAR(100) NOT NULL,

@@ -11,7 +11,7 @@ import { User, MapPin, Shield, FileText, Plus, Trash2, Edit2, LogOut, Loader2, S
 import { apiService } from "@/services/api.service";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import { formatINR } from "@/lib/currency";
+import { formatINR } from '@/lib/currency';
 
 export default function Profile() {
     const navigate = useNavigate();
@@ -22,12 +22,13 @@ export default function Profile() {
 
     // Profile Edit
     const [isEditing, setIsEditing] = useState(false);
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
     const [formData, setFormData] = useState({ fullName: "", phoneNumber: "", email: "" });
 
     // Address Edit
     const [isAddrDialogOpen, setIsAddrDialogOpen] = useState(false);
     const [editingAddrId, setEditingAddrId] = useState<string | null>(null);
-    const [addrForm, setAddrForm] = useState({ label: "Home", fullName: "", phone: "", addressLine1: "", city: "", state: "", pincode: "", isDefault: false });
+    const [addrForm, setAddrForm] = useState({ label: "Home", fullName: "", phone: "", email: "", addressLine1: "", city: "", state: "", pincode: "", isDefault: false });
 
     // Security
     const [passData, setPassData] = useState({ oldPassword: "", newPassword: "", confirmPassword: "" });
@@ -49,7 +50,6 @@ export default function Profile() {
 
             setUser(profile);
 
-            // ✅ Fix Name Display
             setFormData({
                 fullName: profile.full_name || profile.fullName || "",
                 phoneNumber: profile.phone_number || profile.phoneNumber || "",
@@ -67,6 +67,7 @@ export default function Profile() {
 
     // --- Profile Handlers ---
     const handleUpdateProfile = async () => {
+        setIsSavingProfile(true);
         try {
             await apiService.updateUserProfile({
                 fullName: formData.fullName,
@@ -74,9 +75,11 @@ export default function Profile() {
             });
             toast.success("Profile updated!");
             setIsEditing(false);
-            loadData();
+            loadData(); // Reload to confirm changes
         } catch (error) {
             toast.error("Failed to update profile");
+        } finally {
+            setIsSavingProfile(false);
         }
     };
 
@@ -87,6 +90,7 @@ export default function Profile() {
             label: "Home",
             fullName: user?.full_name || user?.fullName || "",
             phone: user?.phone_number || user?.phoneNumber || "",
+            email: "",
             addressLine1: "", city: "", state: "", pincode: "", isDefault: false
         });
         setIsAddrDialogOpen(true);
@@ -98,6 +102,7 @@ export default function Profile() {
             label: addr.label || "Home",
             fullName: addr.full_name || addr.fullName || "",
             phone: addr.phone || "",
+            email: addr.email || "",
             addressLine1: addr.address_line1 || addr.addressLine1 || "",
             city: addr.city || "",
             state: addr.state || "",
@@ -238,8 +243,11 @@ export default function Profile() {
                                 <CardFooter className="flex justify-end gap-2">
                                     {isEditing ? (
                                         <>
-                                            <Button variant="outline" onClick={() => setIsEditing(false)}>Cancel</Button>
-                                            <Button onClick={handleUpdateProfile}><Save className="w-4 h-4 mr-2" /> Save</Button>
+                                            <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isSavingProfile}>Cancel</Button>
+                                            <Button onClick={handleUpdateProfile} disabled={isSavingProfile}>
+                                                {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <Save className="w-4 h-4 mr-2" />}
+                                                Save
+                                            </Button>
                                         </>
                                     ) : (
                                         <Button onClick={() => setIsEditing(true)}>Edit Details</Button>
@@ -260,7 +268,6 @@ export default function Profile() {
                                             <DialogDescription>Manage your delivery details.</DialogDescription>
                                         </DialogHeader>
                                         <div className="grid gap-4 py-4">
-                                            {/* ✅ Fixed Uncontrolled Inputs */}
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div><Label>Label</Label><Input value={addrForm.label || ''} onChange={e => setAddrForm({...addrForm, label: e.target.value})} placeholder="Home" /></div>
                                                 <div><Label>Full Name</Label><Input value={addrForm.fullName || ''} onChange={e => setAddrForm({...addrForm, fullName: e.target.value})} /></div>
@@ -273,6 +280,10 @@ export default function Profile() {
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div><Label>Pincode</Label><Input value={addrForm.pincode || ''} onChange={e => setAddrForm({...addrForm, pincode: e.target.value})} /></div>
                                                 <div><Label>Phone</Label><Input value={addrForm.phone || ''} onChange={e => setAddrForm({...addrForm, phone: e.target.value})} /></div>
+                                            </div>
+                                            <div>
+                                                <Label>Email</Label>
+                                                <Input value={addrForm.email || ''} onChange={e => setAddrForm({...addrForm, email: e.target.value})} placeholder="Optional" />
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <input type="checkbox" checked={!!addrForm.isDefault} onChange={e => setAddrForm({...addrForm, isDefault: e.target.checked})} id="def" className="w-4 h-4 accent-primary" />
@@ -297,11 +308,13 @@ export default function Profile() {
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteAddress(addr.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                                             </div>
                                         </div>
-                                        {/* ✅ Safe Display */}
                                         <p className="font-semibold">{addr.full_name || addr.fullName}</p>
                                         <p className="text-sm text-muted-foreground">{addr.address_line1 || addr.addressLine1}</p>
                                         <p className="text-sm text-muted-foreground">{addr.city}, {addr.state} - {addr.pincode}</p>
-                                        <p className="text-sm mt-2 text-foreground/80"><span className="text-xs text-muted-foreground">Phone:</span> {addr.phone}</p>
+                                        <div className="mt-2 text-sm text-foreground/80 space-y-1">
+                                            <p><span className="text-xs text-muted-foreground">Phone:</span> {addr.phone}</p>
+                                            {addr.email && <p><span className="text-xs text-muted-foreground">Email:</span> {addr.email}</p>}
+                                        </div>
                                     </div>
                                 ))}
                                 {addresses.length === 0 && <p className="text-muted-foreground col-span-2 text-center py-8">No saved addresses found.</p>}

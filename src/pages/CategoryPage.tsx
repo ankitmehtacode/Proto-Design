@@ -63,14 +63,24 @@ const CategoryPage = ({ category, title, subtitle, subCategories = [] }: Categor
             setLoading(true);
             try {
                 const res = await apiService.getProducts(category);
-                const products = res.data || [];
+
+                // ✅ FIX: Handle response whether it is [products] or { data: [products] }
+                const products = Array.isArray(res) ? res : (res.data || []);
+
                 setAllProducts(products);
                 setDisplayedProducts(products);
 
-                try {
-                    await apiService.getCurrentUser();
-                    setIsAuthenticated(true);
-                } catch { setIsAuthenticated(false); }
+                // ✅ FIX: Only check auth if token exists
+                if (apiService.isAuthenticated()) {
+                    try {
+                        await apiService.getCurrentUser();
+                        setIsAuthenticated(true);
+                    } catch {
+                        setIsAuthenticated(false);
+                    }
+                } else {
+                    setIsAuthenticated(false);
+                }
 
             } catch (error) {
                 console.error("Failed to load category data", error);
