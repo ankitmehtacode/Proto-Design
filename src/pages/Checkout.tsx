@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { PaymentGatewaySelector } from '@/components/PaymentGatewaySelector';
 import { formatINR } from '@/lib/currency';
 import { toast } from 'sonner';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MapPin } from 'lucide-react';
 import { apiService } from '@/services/api.service';
 import {
     Select,
@@ -18,7 +18,7 @@ import {
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from "@/components/ui/select"; // ✅ Make sure you have this UI component
+} from "@/components/ui/select";
 
 const INDIAN_STATES = [
     "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam",
@@ -35,6 +35,10 @@ const Checkout = () => {
     const { items, total, clearCart } = useCart();
     const [loading, setLoading] = useState(false);
     const [selectedGateway, setSelectedGateway] = useState('razorpay');
+
+    // 🔥 NEW: Address State
+    const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+    const [selectedAddressId, setSelectedAddressId] = useState('new');
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -58,10 +62,43 @@ const Checkout = () => {
             navigate('/auth');
             return;
         }
-            if (items.length === 0) {
+        if (items.length === 0) {
             navigate('/cart');
         }
+
+        // 🔥 NEW: Fetch Addresses
+        loadAddresses();
     }, [items.length, navigate]);
+
+    const loadAddresses = async () => {
+        try {
+            const addrs = await apiService.getAddresses();
+            setSavedAddresses(addrs);
+            // Optional: Auto-select default
+            const def = addrs.find((a: any) => a.is_default);
+            if(def) handleAddressSelect(def.id, addrs);
+        } catch (e) { console.error("Failed to load addresses", e); }
+    };
+
+    const handleAddressSelect = (id: string, list = savedAddresses) => {
+        setSelectedAddressId(id);
+        if(id === 'new') {
+            setFormData(prev => ({...prev, fullName:'', phone:'', address:'', city:'', state:'', pincode:''}));
+        } else {
+            const addr = list.find(a => a.id === id);
+            if(addr) {
+                setFormData(prev => ({
+                    ...prev,
+                    fullName: addr.full_name,
+                    phone: addr.phone,
+                    address: addr.address_line1,
+                    city: addr.city,
+                    state: addr.state,
+                    pincode: addr.pincode
+                }));
+            }
+        }
+    }
 
     const handleInputChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -73,35 +110,26 @@ const Checkout = () => {
         setFormData((prev) => ({ ...prev, state: value }));
     };
 
-    // ✅ NEW: Validation Function
     const validateForm = () => {
-        // 1. Empty Fields
         if (!formData.fullName || !formData.email || !formData.phone || !formData.address || !formData.pincode || !formData.city || !formData.state) {
             toast.error('Please fill in all required fields');
             return false;
         }
-
-        // 2. Email Validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData.email)) {
             toast.error('Please enter a valid email address');
             return false;
         }
-
-        // 3. Phone Validation (Indian: starts with 6-9, 10 digits)
         const phoneRegex = /^[6-9]\d{9}$/;
         if (!phoneRegex.test(formData.phone)) {
             toast.error('Please enter a valid 10-digit Indian phone number');
             return false;
         }
-
-        // 4. Pincode Validation (6 digits, strictly numeric)
         const pincodeRegex = /^[1-9][0-9]{5}$/;
         if (!pincodeRegex.test(formData.pincode)) {
             toast.error('Please enter a valid 6-digit Pincode');
             return false;
         }
-
         return true;
     };
 
@@ -117,7 +145,6 @@ const Checkout = () => {
                 quantity: item.quantity,
             }));
 
-            // ✅ Pass 'shipping' as the 5th argument
             await apiService.createOrder(
                 orderItems,
                 finalTotal,
@@ -148,7 +175,27 @@ const Checkout = () => {
                     {/* Checkout Form */}
                     <div className="lg:col-span-2 space-y-6">
                         <Card className="p-6">
-                            <h2 className="text-2xl font-semibold mb-4">Shipping Details</h2>
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-2xl font-semibold">Shipping Details</h2>
+
+                                {/* 🔥 NEW: Saved Address Selector (Subtle) */}
+                                {savedAddresses.length > 0 && (
+                                    <div className="w-[200px]">
+                                        <Select value={selectedAddressId} onValueChange={(val) => handleAddressSelect(val)}>
+                                            <SelectTrigger className="h-9">
+                                                <SelectValue placeholder="Load Saved Address" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="new">Use New Address</SelectItem>
+                                                {savedAddresses.map(addr => (
+                                                    <SelectItem key={addr.id} value={addr.id}>{addr.label} - {addr.full_name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div>
                                     <Label htmlFor="fullName">Full Name *</Label>
@@ -226,7 +273,6 @@ const Checkout = () => {
                                     />
                                 </div>
                                 <div>
-                                    {/* ✅ CHANGED: State Dropdown */}
                                     <Label htmlFor="state">State *</Label>
                                     <Select onValueChange={handleStateChange} value={formData.state}>
                                         <SelectTrigger>

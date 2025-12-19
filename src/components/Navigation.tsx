@@ -1,11 +1,30 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X, User, LogOut, Shield, ShoppingCart, Package, ChevronDown, ChevronRight, Search } from "lucide-react";
+import {
+    Menu,
+    X,
+    ShoppingCart,
+    ChevronDown,
+    ChevronRight,
+    Search,
+    User,
+    LogOut,
+    Settings,
+    UserCircle,
+    Package
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiService } from "@/services/api.service";
 import { useCart } from "@/contexts/CartContext";
-import { Badge } from "@/components/ui/badge";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface UserInfo {
     id: string;
@@ -13,8 +32,10 @@ interface UserInfo {
     name: string;
     role?: string;
 }
-// 🔥 LINKS MATCHING APP.X ROUTES
+
+// 🔥 ADDED "All Products" to the top
 const CATEGORIES = [
+    { name: "All Products", path: "/shop" },
     { name: "3D Printers", path: "/printers" },
     { name: "3D Printables", path: "/printables" },
     { name: "Filaments", path: "/filaments" },
@@ -40,21 +61,17 @@ export const Navigation = () => {
                 return;
             }
 
-            // Verify session and get user info
             const userInfo = await apiService.getCurrentUser();
-
-            // ✅ FIXED: Prioritize real name, fallback to email if name is missing
             let fullName = userInfo.user?.fullName || userInfo.user?.email?.split("@")[0];
 
             if (fullName) {
-                // Capitalize first letter if it looks like a lowercase string
                 fullName = fullName.charAt(0).toUpperCase() + fullName.slice(1);
             }
 
             setUser({
                 id: userInfo.id || userInfo.user?.id || '',
                 email: userInfo.user?.email || '',
-                name: fullName, // Now uses the correct name
+                name: fullName,
                 role: userInfo.role || userInfo.user?.role,
             });
 
@@ -67,17 +84,14 @@ export const Navigation = () => {
         }
     }, []);
 
-    // Initial auth check on mount (once)
     useEffect(() => {
         checkAuthStatus().finally(() => {
             setAuthLoading(false);
         });
     }, [checkAuthStatus]);
 
-    // Optional: Poll every 5 minutes (
-    // 300000 ms) for token expiration
     useEffect(() => {
-        const interval = setInterval(checkAuthStatus, 300); // 5 minutes
+        const interval = setInterval(checkAuthStatus, 1000);
         return () => clearInterval(interval);
     }, [checkAuthStatus]);
 
@@ -113,13 +127,14 @@ export const Navigation = () => {
                         </span>
                     </Link>
 
+
                     {/* Desktop Nav */}
                     <div className="hidden md:flex items-center space-x-8">
                         <Link to="/" className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors">
                             Home
                         </Link>
 
-                        {/* Dropdown */}
+                        {/* Dropdown - Keeping UI EXACTLY as before */}
                         <div className="relative group h-20 flex items-center">
                             <button className="flex items-center gap-1 text-sm font-medium text-foreground/80 group-hover:text-primary transition-colors focus:outline-none">
                                 Products
@@ -134,7 +149,7 @@ export const Navigation = () => {
                                         className="flex items-center justify-between px-3 py-2 hover:bg-accent rounded-lg group/item transition-colors"
                                     >
                                         <span className="text-sm text-foreground group-hover/item:text-primary">{cat.name}</span>
-                                        <ChevronRight size={14} className="text-muted-foreground group-hover/item:text-primary" />
+                                        {cat.path === '/shop' ? <Search size={14} /> : <ChevronRight size={14} className="text-muted-foreground group-hover/item:text-primary" />}
                                     </Link>
                                 ))}
                             </div>
@@ -144,24 +159,21 @@ export const Navigation = () => {
                             Custom Printing
                         </Link>
 
-                        {user && (
-                            <Link to="/orders" className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors flex items-center gap-1">
-                                Orders
-                            </Link>
-                        )}
-
+                        {/* ✅ RESTORED: Admin Button */}
                         {isAdmin && (
-                            <Link to="/admin" className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors flex items-center gap-1">
-                                Admin
+                            <Link to="/admin" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
+                                Admin Dashboard
                             </Link>
                         )}
                     </div>
 
                     {/* Right Icons */}
                     <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="icon" className="hidden sm:flex text-muted-foreground hover:text-primary">
-                            <Search size={20} />
-                        </Button>
+                        <Link to="/shop">
+                            <Button variant="ghost" size="icon" className="hidden sm:flex text-muted-foreground hover:text-primary">
+                                <Search size={20} />
+                            </Button>
+                        </Link>
 
                         <Link to="/cart">
                             <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-primary">
@@ -176,16 +188,25 @@ export const Navigation = () => {
 
                         <div className="hidden md:flex items-center gap-2 ml-2 pl-2 border-l">
                             {user ? (
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium hidden lg:block">{user.name}</span>
-                                    <Button variant="ghost" size="icon" onClick={handleSignOut} title="Sign Out">
-                                        <LogOut size={18} />
-                                    </Button>
-                                </div>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-accent/50">
+                                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">{user.name.charAt(0)}</div>
+                                            <span className="text-sm font-medium hidden lg:block">{user.name}</span>
+                                            <ChevronDown size={14} className="text-muted-foreground" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-56">
+                                        <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => navigate('/profile')}><UserCircle className="mr-2 h-4 w-4" /> Profile</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => navigate('/orders')}><Package className="mr-2 h-4 w-4" /> Orders</DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={handleSignOut} className="text-destructive"><LogOut className="mr-2 h-4 w-4" /> Sign Out</DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             ) : (
-                                <Link to="/auth">
-                                    <Button size="sm" className="rounded-full px-6">Sign In</Button>
-                                </Link>
+                                <Link to="/auth"><Button size="sm" className="rounded-full px-6">Sign In</Button></Link>
                             )}
                         </div>
 
@@ -231,7 +252,12 @@ export const Navigation = () => {
 
                                 <Link to="/custom" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg">Custom Printing</Link>
 
-                                {user && <Link to="/orders" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg">My Orders</Link>}
+                                {user && (
+                                    <>
+                                        <Link to="/profile" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg">My Profile</Link>
+                                        <Link to="/orders" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg">My Orders</Link>
+                                    </>
+                                )}
                                 {isAdmin && <Link to="/admin" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg text-primary">Admin Dashboard</Link>}
 
                                 <div className="pt-4 mt-2 border-t">

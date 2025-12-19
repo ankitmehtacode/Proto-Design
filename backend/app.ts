@@ -15,6 +15,7 @@ import ordersRoutes from './src/routes/orders.routes.js';
 import cartRoutes from './src/routes/cart.routes.js';
 import quotesRoutes from './src/routes/quotes.routes.js';
 import errorHandler from './src/middleware/errorHandler.js';
+import userRoutes from './src/routes/user.routes.js';
 
 
 // Create Express app
@@ -103,6 +104,8 @@ app.use('/api/orders', ordersRoutes);
 app.use('/api/cart', cartRoutes);
 
 app.use('/api/quotes', quotesRoutes);
+
+app.use('/api/user', userRoutes);
 
 // ============================================
 // 404 HANDLER

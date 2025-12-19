@@ -10,6 +10,7 @@ import { Upload, Check, Loader2, FileBox, Ruler, Clock, RotateCw, Scale, Trash2,
 import { toast } from "sonner";
 import { apiService } from "@/services/api.service";
 import { formatINR } from "@/lib/currency";
+import { useNavigate } from "react-router-dom";
 
 // --- OPTIONS CONSTANTS ---
 const PRINTER_QUALITIES = [
@@ -66,7 +67,9 @@ export default function CustomPrinting() {
 
     const [contact, setContact] = useState({ email: "", phone: "", notes: "" });
     const [isSending, setIsSending] = useState(false);
-    const [isSuccess, setIsSuccess] = useState(false);
+    const [isSuccess, setIsSuccess] = useState(false)
+
+    const navigate = useNavigate();
 
     // --- ACTIONS ---
 
@@ -79,8 +82,10 @@ export default function CustomPrinting() {
     };
 
     const handleSendQuote = async () => {
-        if (!contact.email || !contact.phone) {
-            toast.error("Please enter email and phone number");
+        // --- ADD THIS BLOCK AT THE START ---
+        if (!apiService.isAuthenticated()) {
+            toast.error("Please sign in to send a quote request.");
+            navigate('/auth'); // Redirects to login page
             return;
         }
         setIsSending(true);

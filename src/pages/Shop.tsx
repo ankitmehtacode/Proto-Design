@@ -2,22 +2,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Heart } from 'lucide-react';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from 'sonner';
-import { Loader2, ShoppingCart, Search } from 'lucide-react';
+import { Loader2, ShoppingCart, Search, Heart, Filter, X, Star } from 'lucide-react';
 import { apiService } from '@/services/api.service';
 import { useCart } from '@/contexts/CartContext';
 import ProductImageCarousel from '@/components/ProductImageCarousel';
+import { formatINR } from '@/lib/currency';
 
 interface ProductImage {
     id: string;
@@ -30,302 +23,325 @@ interface Product {
     id: string;
     name: string;
     description: string;
+    short_description?: string;
     price: number;
     stock: number;
     likes_count: number;
+    average_rating?: number;
+    review_count?: number;
     image_url: string | null;
     category: string;
+    created_at?: string;
     product_images?: ProductImage[];
     images?: ProductImage[];
 }
 
+// Configuration for Subcategories mapping
+const CATEGORY_MAP: Record<string, string[]> = {
+    '3d_printer': ['FDM', 'SLA', 'Metal 3D Printer', '3D Pen', 'Others'],
+    'filament': ['ABS', 'PETG', 'PLA', 'Carbon Fiber', 'Nylon Fiber', 'Others'],
+    'resin': ['Standard', 'Water-Washable', 'Tough', 'Others'],
+    'accessory': [],
+    'spare_part': []
+};
+
 const Shop = () => {
     const navigate = useNavigate();
     const { addToCart } = useCart();
-    const [products, setProducts] = useState<Product[]>([]);
-    const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+
+    const [allProducts, setAllProducts] = useState<Product[]>([]);
+    const [displayedProducts, setDisplayedProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
-    const [category, setCategory] = useState('all');
+
+    // Filters
     const [searchTerm, setSearchTerm] = useState('');
+    const [activeCategory, setActiveCategory] = useState('all');
+    const [activeSubCategory, setActiveSubCategory] = useState('all');
+    const [sortOption, setSortOption] = useState('newest');
+
     const [isLiked, setIsLiked] = useState<Record<string, boolean>>({});
-    const [likesCounts, setLikesCounts] = useState<Record<string, number>>({});
     const [isAuthenticated, setIsAuthenticated] = useState(false);
-    const [loadingLikes, setLoadingLikes] = useState(false);
 
     useEffect(() => {
-        const initLikes = async () => {
+        const loadData = async () => {
+            setLoading(true);
             try {
-                await apiService.getCurrentUser();
-                setIsAuthenticated(true);
+                // Fetch ALL products
+                const res = await apiService.getProducts();
+                const products = res.data || [];
+                setAllProducts(products);
+                setDisplayedProducts(products);
 
-                const firstProducts = products.slice(0, 9);
-                const likesData = await Promise.allSettled(
-                    firstProducts.map(product => apiService.isProductLiked(product.id))
-                );
+                try {
+                    await apiService.getCurrentUser();
+                    setIsAuthenticated(true);
+                } catch { setIsAuthenticated(false); }
 
-                const likesState: Record<string, boolean> = {};
-                const countsState: Record<string, number> = {};
-
-                firstProducts.forEach((product, index) => {
-                    const result = likesData[index];
-                    if (result.status === 'fulfilled') {
-                        likesState[product.id] = result.value.isLiked;
-                        countsState[product.id] = result.value.likesCount;
-                    } else {
-                        likesState[product.id] = false;
-                        countsState[product.id] = product.likes_count || 0;
-                    }
-                });
-
-                setIsLiked(likesState);
-                setLikesCounts(countsState);
-            } catch {
-                setIsAuthenticated(false);
+            } catch (error) {
+                console.error("Failed to load shop data", error);
+                toast.error("Failed to load products");
+            } finally {
+                setLoading(false);
             }
         };
-
-        if (products.length > 0) {
-            initLikes();
-        }
-    }, [products]);
-
-    const handleLikeToggle = async (productId: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!isAuthenticated) {
-            toast.error('Please sign in to like products');
-            navigate('/auth');
-            return;
-        }
-
-        setLoadingLikes(true);
-        try {
-            if (isLiked[productId]) {
-                await apiService.unlikeProduct(productId);
-                setIsLiked(prev => ({ ...prev, [productId]: false }));
-                setLikesCounts(prev => ({
-                    ...prev,
-                    [productId]: Math.max((prev[productId] || 0) - 1, 0)
-                }));
-                toast.success('Unliked!');
-            } else {
-                await apiService.likeProduct(productId);
-                setIsLiked(prev => ({ ...prev, [productId]: true }));
-                setLikesCounts(prev => ({
-                    ...prev,
-                    [productId]: (prev[productId] || 0) + 1
-                }));
-                toast.success('Liked!');
-            }
-        } catch (error: any) {
-            toast.error('Failed to update like');
-        } finally {
-            setLoadingLikes(false);
-        }
-    };
-
-    useEffect(() => {
-        fetchProducts();
+        loadData();
     }, []);
 
-    const fetchProducts = async () => {
-        try {
-            setLoading(true);
-            const response = await apiService.getProducts();
-            setProducts(response.data || []);
-            setFilteredProducts(response.data || []);
-        } catch (error: any) {
-            console.error('Fetch products error:', error);
-            toast.error('Failed to load products');
-        } finally {
-            setLoading(false);
-        }
-    };
-
+    // Filter Logic
     useEffect(() => {
-        let filtered = products;
+        let result = [...allProducts];
 
-        if (category !== 'all') {
-            filtered = filtered.filter((p) => p.category === category);
-        }
-
+        // 1. Search
         if (searchTerm) {
-            filtered = filtered.filter(
-                (p) =>
-                    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    p.description.toLowerCase().includes(searchTerm.toLowerCase())
+            const lower = searchTerm.toLowerCase();
+            result = result.filter(p =>
+                p.name.toLowerCase().includes(lower) ||
+                p.description.toLowerCase().includes(lower) ||
+                (p.short_description || '').toLowerCase().includes(lower)
             );
         }
 
-        setFilteredProducts(filtered);
-    }, [category, searchTerm, products]);
+        // 2. Main Category
+        if (activeCategory !== 'all') {
+            result = result.filter(p => p.category === activeCategory);
+        }
+
+        // 3. Sub Category (Only if Main Category is selected and has subs)
+        if (activeCategory !== 'all' && activeSubCategory !== 'all') {
+            const subCats = CATEGORY_MAP[activeCategory] || [];
+            if (subCats.length > 0) {
+                if (activeSubCategory === 'Others') {
+                    // Filter out known subcats to find 'Others'
+                    const knownKeywords = subCats
+                        .filter(c => c !== 'Others')
+                        .map(c => c.toLowerCase().replace(' fiber', '').replace(' 3d printer', ''));
+
+                    result = result.filter(p => {
+                        const text = (p.name + ' ' + p.description).toLowerCase();
+                        return !knownKeywords.some(k => text.includes(k));
+                    });
+                } else {
+                    const keyword = activeSubCategory.toLowerCase()
+                        .replace(' fiber', '')
+                        .replace(' 3d printer', '');
+
+                    result = result.filter(p => {
+                        const text = (p.name + ' ' + p.description).toLowerCase();
+                        return text.includes(keyword);
+                    });
+                }
+            }
+        }
+
+        // 4. Sort
+        result.sort((a, b) => {
+            if (sortOption === 'price-low') return a.price - b.price;
+            if (sortOption === 'price-high') return b.price - a.price;
+            return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+        });
+
+        setDisplayedProducts(result);
+    }, [searchTerm, activeCategory, activeSubCategory, sortOption, allProducts]);
+
+    const clearAll = () => {
+        setSearchTerm('');
+        setActiveCategory('all');
+        setActiveSubCategory('all');
+        setSortOption('newest');
+    };
 
     const handleAddToCart = async (product: Product, e: React.MouseEvent) => {
         e.stopPropagation();
+        if (!isAuthenticated) {
+            toast.error("Please sign in to add items");
+            navigate('/auth');
+            return;
+        }
         try {
-            if (!apiService.isAuthenticated()) {
-                toast.error('Please sign in to add items to cart');
-                navigate('/auth');
-                return;
-            }
-
             await addToCart(product.id, 1);
-            toast.success(`${product.name} added to cart!`);
-        } catch (error: any) {
-            toast.error('Failed to add to cart');
+            toast.success("Added to cart");
+        } catch { toast.error("Failed to add to cart"); }
+    };
+
+    const handleLike = async (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!isAuthenticated) return toast.error("Sign in to like");
+
+        const currentLiked = isLiked[id];
+        setIsLiked(prev => ({ ...prev, [id]: !currentLiked }));
+
+        try {
+            if (currentLiked) await apiService.unlikeProduct(id);
+            else await apiService.likeProduct(id);
+        } catch {
+            setIsLiked(prev => ({ ...prev, [id]: currentLiked }));
+            toast.error("Failed to update like");
         }
     };
 
-    const formatPrice = (price: number) => {
-        return new Intl.NumberFormat('en-IN', {
-            style: 'currency',
-            currency: 'INR',
-        }).format(price);
-    };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center pt-20">
-                <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
+    if (loading) return <div className="min-h-screen pt-32 flex justify-center"><Loader2 className="animate-spin w-8 h-8 text-primary" /></div>;
 
     return (
-        <div className="min-h-screen pt-20 pb-10">
+        <div className="min-h-screen pt-20 pb-10 font-sans">
             <div className="container mx-auto px-4">
-                {/* Hero Section */}
-                <section className="py-16 gradient-subtle mb-8">
-                    <motion.div
-                        initial={{ opacity: 0, y: 30 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.6 }}
-                        className="text-center max-w-3xl mx-auto"
-                    >
-                        <h1 className="font-display text-5xl md:text-6xl mb-6">Premium 3D Printers</h1>
-                        <p className="text-xl text-muted-foreground">
-                            High-end printers designed for exceptional precision and quality.
+
+                <section className="py-12 mb-8 rounded-2xl bg-secondary/10 text-center border border-border/50">
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <h1 className="text-4xl md:text-5xl font-extrabold mb-3 tracking-tight">Shop All Products</h1>
+                        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                            Browse our complete collection of printers, materials, and accessories.
                         </p>
                     </motion.div>
                 </section>
 
-                {/* Filters */}
-                <section className="py-8 border-b mb-8">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="relative">
-                            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <section className="sticky top-20 z-30 bg-background/95 backdrop-blur-md border rounded-xl p-3 mb-8 shadow-sm">
+                    <div className="flex flex-col lg:flex-row items-center gap-3">
+                        <div className="relative flex-1 w-full">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search products..."
-                                className="pl-10"
+                                placeholder="Search by name, specs..."
+                                className="pl-9 h-10 bg-white"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
                         </div>
 
-                        <Select value={category} onValueChange={setCategory}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Category" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Categories</SelectItem>
-                                <SelectItem value="3d_printer">3D Printer</SelectItem>
-                                <SelectItem value="3d_model">3D Model</SelectItem>
-                                <SelectItem value="accessory">Accessory</SelectItem>
-                            </SelectContent>
-                        </Select>
+                        {/* Main Category Filter */}
+                        <div className="w-full lg:w-[200px] shrink-0">
+                            <Select value={activeCategory} onValueChange={(val) => { setActiveCategory(val); setActiveSubCategory('all'); }}>
+                                <SelectTrigger className="h-10 bg-white">
+                                    <SelectValue placeholder="Category" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Categories</SelectItem>
+                                    <SelectItem value="3d_printer">3D Printers</SelectItem>
+                                    <SelectItem value="filament">Filaments</SelectItem>
+                                    <SelectItem value="resin">Resins</SelectItem>
+                                    <SelectItem value="accessory">Accessories</SelectItem>
+                                    <SelectItem value="spare_part">Spare Parts</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                        <Button variant="outline" onClick={fetchProducts}>
-                            Reset Filters
+                        {/* Sub Category Filter - Only shows if Main Category has options */}
+                        {activeCategory !== 'all' && CATEGORY_MAP[activeCategory]?.length > 0 && (
+                            <motion.div initial={{opacity:0, x:-10}} animate={{opacity:1, x:0}} className="w-full lg:w-[200px] shrink-0">
+                                <Select value={activeSubCategory} onValueChange={setActiveSubCategory}>
+                                    <SelectTrigger className="h-10 bg-white">
+                                        <SelectValue placeholder="Sub Category" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Types</SelectItem>
+                                        {CATEGORY_MAP[activeCategory].map(cat => (
+                                            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </motion.div>
+                        )}
+
+                        <div className="w-full lg:w-[180px] shrink-0">
+                            <Select value={sortOption} onValueChange={setSortOption}>
+                                <SelectTrigger className="h-10 bg-white">
+                                    <SelectValue placeholder="Sort By" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="newest">Newest Arrivals</SelectItem>
+                                    <SelectItem value="price-low">Price: Low to High</SelectItem>
+                                    <SelectItem value="price-high">Price: High to Low</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <Button
+                            variant="ghost"
+                            onClick={clearAll}
+                            className="h-10 px-4 text-muted-foreground hover:text-destructive hover:bg-destructive/10 whitespace-nowrap shrink-0"
+                        >
+                            <X className="w-4 h-4 mr-2" /> Clear
                         </Button>
                     </div>
                 </section>
 
-                {/* Products Grid */}
-                <section className="py-8">
-                    {filteredProducts.length === 0 ? (
-                        <div className="text-center py-20">
-                            <p className="text-muted-foreground">No products found</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
-                            {filteredProducts.map((product, index) => {
-                                const images = (product.product_images || product.images || [])
-                                    .sort((a, b) => a.display_order - b.display_order);
+                {displayedProducts.length === 0 ? (
+                    <div className="text-center py-24 bg-muted/10 rounded-xl border border-dashed border-border">
+                        <Filter className="h-12 w-12 mx-auto text-muted-foreground mb-4 opacity-30" />
+                        <h3 className="text-lg font-semibold text-muted-foreground">No products found</h3>
+                        <p className="text-sm text-muted-foreground mb-4">Try adjusting your filters or search terms</p>
+                        <Button variant="outline" onClick={clearAll}>Clear All Filters</Button>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {displayedProducts.map((product, idx) => {
+                            const images = (product.product_images || product.images || []).sort((a,b) => a.display_order - b.display_order);
 
-                                return (
-                                    <motion.div
-                                        key={product.id}
-                                        initial={{ opacity: 0, y: 30 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ duration: 0.6, delay: index * 0.1 }}
+                            return (
+                                <motion.div
+                                    key={product.id}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.05 }}
+                                >
+                                    <Card
+                                        onClick={() => navigate(`/product/${product.id}`)}
+                                        className="group h-full flex flex-col overflow-hidden hover:shadow-xl transition-all cursor-pointer border-border/60"
                                     >
-                                        <Card
-                                            onClick={() => navigate(`/product/${product.id}`)}
-                                            className="flex flex-col overflow-hidden hover:shadow-glow transition-all h-full group cursor-pointer"
-                                        >
-                                            <div className="relative p-4 bg-muted/50">
-                                                <ProductImageCarousel
-                                                    images={images.length > 0 ? images : [{ id: '0', image_url: product.image_url || '', display_order: 0 }]}
-                                                    productName={product.name}
-                                                />
+                                        <div className="aspect-[4/3] p-4 bg-white relative">
+                                            <ProductImageCarousel
+                                                images={images.length > 0 ? images : [{id:'0', image_url: product.image_url||'', display_order:0}]}
+                                                productName={product.name}
+                                            />
+                                            {/* Like Button */}
+                                            <button
+                                                onClick={(e) => handleLike(product.id, e)}
+                                                className={`absolute top-3 right-3 py-1 px-2 rounded-full bg-white/90 backdrop-blur-sm shadow-sm transition-all z-10 flex items-center gap-1 text-xs font-medium ${
+                                                    isLiked[product.id] ? 'text-red-500' : 'text-gray-500 hover:text-red-500'
+                                                }`}
+                                            >
+                                                <Heart className={`w-3.5 h-3.5 ${isLiked[product.id] ? 'fill-current' : ''}`} />
+                                                {product.likes_count > 0 && <span>{product.likes_count}</span>}
+                                            </button>
+                                        </div>
+
+                                        <CardContent className="p-4 flex-1 flex flex-col">
+                                            <div className="mb-2">
+                                                <h3 className="font-semibold text-foreground line-clamp-1" title={product.name}>{product.name}</h3>
+                                                <p className="text-xs text-muted-foreground line-clamp-2 mt-1 min-h-[2.5em]">
+                                                    {product.short_description || product.description}
+                                                </p>
                                             </div>
 
-                                            <CardHeader>
-                                                <div className="flex items-start justify-between mb-2">
-                                                    <CardTitle className="text-lg">{product.name}</CardTitle>
-                                                    <Badge variant="outline" className="text-xs">
-                                                        {product.category.replace('_', ' ')}
-                                                    </Badge>
-                                                </div>
-                                                <CardDescription className="line-clamp-2">
-                                                    {product.description}
-                                                </CardDescription>
-                                            </CardHeader>
-
-                                            <CardContent className="flex-1 flex flex-col">
-                                                <div className="mb-4 flex-1">
-                                                    <p className="text-2xl font-bold text-primary">{formatPrice(product.price)}</p>
+                                            <div className="mt-auto pt-4 flex items-center justify-between border-t border-border/50">
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-lg text-primary">{formatINR(product.price)}</span>
                                                 </div>
 
-                                                <div className="flex items-center justify-between mb-4">
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={(e) => handleLikeToggle(product.id, e)}
-                                                            disabled={!isAuthenticated || loadingLikes}
-                                                            className={`p-2 rounded-full flex items-center gap-1 transition-all duration-200 ${
-                                                                isLiked[product.id]
-                                                                    ? 'bg-red-500 hover:bg-red-600 text-white shadow-md'
-                                                                    : 'bg-muted hover:bg-muted-foreground/50 text-muted-foreground hover:text-foreground'
-                                                            } ${!isAuthenticated ? 'cursor-not-allowed opacity-50' : ''}`}
-                                                        >
-                                                            <Heart
-                                                                className={`h-4 w-4 transition-all ${isLiked[product.id] ? 'fill-current' : ''}`}
-                                                            />
-                                                            <span className="text-xs font-semibold">
-                                                                {likesCounts[product.id] || product.likes_count || 0}
-                                                            </span>
-                                                        </button>
-                                                    </div>
-
-                                                    <p className={`text-sm ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                                        {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
-                                                    </p>
+                                                <div className="flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded-md border border-yellow-100">
+                                                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                                    <span className="text-xs font-semibold text-yellow-700">
+                                                        {product.average_rating ? Number(product.average_rating).toFixed(1) : "0.0"}
+                                                    </span>
+                                                    <span className="text-[10px] text-muted-foreground/70">
+                                                        ({product.review_count || 0})
+                                                    </span>
                                                 </div>
-                                                <Button
-                                                    onClick={(e) => handleAddToCart(product, e)}
-                                                    disabled={product.stock === 0}
-                                                    className="w-full"
-                                                >
-                                                    <ShoppingCart className="mr-2 h-4 w-4" />
-                                                    Add to Cart
-                                                </Button>
-                                            </CardContent>
-                                        </Card>
-                                    </motion.div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </section>
+                                            </div>
+
+                                            <Button
+                                                size="sm"
+                                                onClick={(e) => handleAddToCart(product, e)}
+                                                className="w-full mt-3 rounded-md text-xs font-semibold h-9"
+                                                disabled={product.stock === 0}
+                                            >
+                                                {product.stock > 0 ? <><ShoppingCart className="w-3 h-3 mr-2" /> Add to Cart</> : "Out of Stock"}
+                                            </Button>
+                                        </CardContent>
+                                    </Card>
+                                </motion.div>
+                            )
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -3,6 +3,7 @@ import multer from 'multer';
 import nodemailer from 'nodemailer';
 import db from '../config/database.js';
 import { storageService } from '../services/storage.service.js';
+import authMiddleware from '../middleware/auth.js'; // Import Auth
 
 const router = express.Router();
 
@@ -18,6 +19,17 @@ const transporter = nodemailer.createTransport({
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
 });
 
+// ✅ GET MY QUOTES
+router.get('/my', authMiddleware, async (req, res) => {
+    try {
+        // Fetch by user_id
+        const quotes = await db.any('SELECT * FROM quotes WHERE user_id = $1 ORDER BY created_at DESC', [req.userId]);
+        res.json(quotes);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.post('/request', upload.single('file'), async (req, res) => {
     try {
         const { email, phone, notes, specifications } = req.body;
@@ -25,12 +37,25 @@ router.post('/request', upload.single('file'), async (req, res) => {
 
         if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
-        // A. Upload to Cloudinary
+        // 1. Upload File
         const fileUrl = await storageService.uploadFile(file, 'quotes/stls');
 
-        // B. Parse Specifications
+        // 2. Parse Specifications
         let specs = {};
-        try { specs = JSON.parse(specifications); } catch (e) { specs = {}; }
+        try {
+            specs = typeof specifications === 'string' ? JSON.parse(specifications) : specifications;
+        } catch (e) {
+            console.error("Spec Parse Error", e);
+            specs = {};
+        }
+
+        const estPrice = specs.estimatedPrice || 0;
+
+        // 3. Insert into DB
+        await db.none(`
+            INSERT INTO quotes (email, phone, file_url, file_name, specifications, estimated_price, admin_notes, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+        `, [email, phone, fileUrl, file.originalname, specs, estPrice, notes]);
 
         const modelStats = specs.originalStats || {};
         const printDims = specs.printDimensions || {};
@@ -172,25 +197,20 @@ router.post('/request', upload.single('file'), async (req, res) => {
     }
 });
 
-// GET /api/quotes/admin/all
+// ADMIN ROUTES
 router.get('/admin/all', async (req, res) => {
     try {
         const quotes = await db.any('SELECT * FROM quotes ORDER BY created_at DESC');
         res.json(quotes);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// PUT /api/quotes/:id/status
 router.put('/:id/status', async (req, res) => {
     try {
         const { status } = req.body;
         await db.none('UPDATE quotes SET status = $1 WHERE id = $2', [status, req.params.id]);
         res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 export default router;

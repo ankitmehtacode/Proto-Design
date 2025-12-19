@@ -48,6 +48,14 @@ class ApiService {
         const contentType = res.headers.get("content-type") || "";
 
         if (!res.ok) {
+            // Handle 401 specifically (Token Expired)
+            if (res.status === 401 && !options.skipAuth) {
+                this.clearToken();
+                if (window.location.pathname !== '/auth') {
+                    window.location.href = '/auth'; // Redirect to login
+                }
+            }
+
             let errBody: any = {};
             if (contentType.includes("application/json")) {
                 errBody = await res.json().catch(() => ({}));
@@ -92,7 +100,6 @@ class ApiService {
 
     // ========== Auth Routes ==========
 
-    // Core signup method matching Backend expectation
     async signup(email: string, password: string, fullName: string) {
         const data = await this.request("/auth/signup", {
             method: "POST",
@@ -107,8 +114,6 @@ class ApiService {
         return data;
     }
 
-    // ✅ FIXED: Alias 'register' to match Auth.tsx usage
-    // Auth.tsx passes (fullName, email, password), so we map it correctly here.
     async register(fullName: string, email: string, password: string) {
         return this.signup(email, password, fullName);
     }
@@ -127,7 +132,6 @@ class ApiService {
         return data;
     }
 
-    // ✅ ADDED: Google Login Support
     async loginWithGoogle(token: string) {
         const data = await this.request("/auth/google", {
             method: "POST",
@@ -148,6 +152,69 @@ class ApiService {
 
     async getCurrentUser() {
         return this.request("/auth/me");
+    }
+
+    async forgotPassword(email: string) {
+        return this.request("/auth/forgot-password", {
+            method: "POST",
+            body: JSON.stringify({ email }),
+            skipAuth: true,
+        });
+    }
+
+    async resetPassword(token: string, newPassword: string) {
+        return this.request("/auth/reset-password", {
+            method: "POST",
+            body: JSON.stringify({ token, newPassword }),
+            skipAuth: true,
+        });
+    }
+
+    async changePassword(oldPassword: string, newPassword: string) {
+        return this.request("/auth/change-password", {
+            method: "POST",
+            body: JSON.stringify({ oldPassword, newPassword })
+        });
+    }
+
+    // ========== User Profile Routes ==========
+
+    async getUserProfile() {
+        return this.request("/user/profile");
+    }
+
+    async updateUserProfile(data: { fullName?: string; phoneNumber?: string; avatarUrl?: string }) {
+        return this.request("/user/profile", {
+            method: "PUT",
+            body: JSON.stringify(data)
+        });
+    }
+
+    async getAddresses() {
+        return this.request("/user/addresses");
+    }
+
+    async addAddress(address: any) {
+        return this.request("/user/addresses", {
+            method: "POST",
+            body: JSON.stringify(address)
+        });
+    }
+
+    // ✅ ADDED
+    async updateAddress(id: string, address: any) {
+        return this.request(`/user/addresses/${id}`, {
+            method: "PUT",
+            body: JSON.stringify(address)
+        });
+    }
+
+    async deleteAddress(id: string) {
+        return this.request(`/user/addresses/${id}`, { method: "DELETE" });
+    }
+
+    async getSavedModels() {
+        return this.request("/user/models");
     }
 
     // ========== Products Routes ==========
@@ -286,27 +353,13 @@ class ApiService {
         return this.request(`/products/${productId}/like`, { method: 'DELETE' });
     }
 
-    async forgotPassword(email: string) {
-        return this.request("/auth/forgot-password", {
-            method: "POST",
-            body: JSON.stringify({ email }),
-            skipAuth: true,
-        });
-    }
-
-    async resetPassword(token: string, newPassword: string) {
-        return this.request("/auth/reset-password", {
-            method: "POST",
-            body: JSON.stringify({ token, newPassword }),
-            skipAuth: true,
-        });
-    }
-
+    // ===== QUOTES =====
     async sendQuoteRequest(formData: FormData) {
+        // Public/Semi-public route
         return this.request("/quotes/request", {
             method: "POST",
             body: formData,
-        });
+            });
     }
 
     async getAllQuotes() {
@@ -319,6 +372,12 @@ class ApiService {
             body: JSON.stringify({ status })
         });
     }
+
+    // ✅ ADDED
+    async getMyQuotes() {
+        return this.request("/quotes/my");
+    }
+
 }
 
 export const apiService = new ApiService();
