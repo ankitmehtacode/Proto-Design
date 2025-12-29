@@ -19,6 +19,7 @@ interface ProductImage {
     display_order: number;
 }
 
+// ✅ 1. FIXED INTERFACE: Added is_archived
 interface Product {
     id: string;
     name: string;
@@ -34,6 +35,7 @@ interface Product {
     created_at?: string;
     product_images?: ProductImage[];
     images?: ProductImage[];
+    is_archived?: boolean; // <--- Added this line
 }
 
 // Configuration for Subcategories mapping
@@ -55,6 +57,7 @@ const Shop = () => {
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState(''); // ✅ Added for performance
     const [activeCategory, setActiveCategory] = useState('all');
     const [activeSubCategory, setActiveSubCategory] = useState('all');
     const [sortOption, setSortOption] = useState('newest');
@@ -62,24 +65,33 @@ const Shop = () => {
     const [isLiked, setIsLiked] = useState<Record<string, boolean>>({});
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+    // ✅ Debounce Search Effect
+    useEffect(() => {
+        const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+        return () => clearTimeout(timer);
+    }, [searchTerm]);
+
     useEffect(() => {
         const loadData = async () => {
             setLoading(true);
             try {
                 // Fetch ALL products
                 const res = await apiService.getProducts();
-
-                // ✅ FIX: Handle response whether it is [products] or { data: [products] }
                 const products = Array.isArray(res) ? res : (res.data || []);
 
-                setAllProducts(products);
-                setDisplayedProducts(products);
+                // ✅ 2. FIXED LOGIC: Filter out archived products
+                const activeProducts = products.filter((p: Product) => !p.is_archived);
 
-                // ✅ FIX: Only check auth if token exists to prevent redirect loop
+                setAllProducts(activeProducts);
+                setDisplayedProducts(activeProducts);
+
                 if (apiService.isAuthenticated()) {
                     try {
                         await apiService.getCurrentUser();
                         setIsAuthenticated(true);
+                        // ✅ 3. FIXED: Load likes from local storage for persistence
+                        const savedLikes = JSON.parse(localStorage.getItem('user_likes') || '{}');
+                        setIsLiked(savedLikes);
                     } catch {
                         setIsAuthenticated(false);
                     }
@@ -97,13 +109,13 @@ const Shop = () => {
         loadData();
     }, []);
 
-    // Filter Logic
+    // ✅ 4. OPTIMIZED FILTER LOGIC (Uses debouncedSearch)
     useEffect(() => {
         let result = [...allProducts];
 
-        // 1. Search
-        if (searchTerm) {
-            const lower = searchTerm.toLowerCase();
+        // Search
+        if (debouncedSearch) {
+            const lower = debouncedSearch.toLowerCase();
             result = result.filter(p =>
                 p.name.toLowerCase().includes(lower) ||
                 p.description.toLowerCase().includes(lower) ||
@@ -111,17 +123,16 @@ const Shop = () => {
             );
         }
 
-        // 2. Main Category
+        // Main Category
         if (activeCategory !== 'all') {
             result = result.filter(p => p.category === activeCategory);
         }
 
-        // 3. Sub Category (Only if Main Category is selected and has subs)
+        // Sub Category
         if (activeCategory !== 'all' && activeSubCategory !== 'all') {
             const subCats = CATEGORY_MAP[activeCategory] || [];
             if (subCats.length > 0) {
                 if (activeSubCategory === 'Others') {
-                    // Filter out known subcats to find 'Others'
                     const knownKeywords = subCats
                         .filter(c => c !== 'Others')
                         .map(c => c.toLowerCase().replace(' fiber', '').replace(' 3d printer', ''));
@@ -143,7 +154,7 @@ const Shop = () => {
             }
         }
 
-        // 4. Sort
+        // Sort
         result.sort((a, b) => {
             if (sortOption === 'price-low') return a.price - b.price;
             if (sortOption === 'price-high') return b.price - a.price;
@@ -151,10 +162,11 @@ const Shop = () => {
         });
 
         setDisplayedProducts(result);
-    }, [searchTerm, activeCategory, activeSubCategory, sortOption, allProducts]);
+    }, [debouncedSearch, activeCategory, activeSubCategory, sortOption, allProducts]);
 
     const clearAll = () => {
         setSearchTerm('');
+        setDebouncedSearch('');
         setActiveCategory('all');
         setActiveSubCategory('all');
         setSortOption('newest');
@@ -178,13 +190,20 @@ const Shop = () => {
         if (!isAuthenticated) return toast.error("Sign in to like");
 
         const currentLiked = isLiked[id];
-        setIsLiked(prev => ({ ...prev, [id]: !currentLiked }));
+        const newState = { ...isLiked, [id]: !currentLiked };
+
+        setIsLiked(newState);
+        // ✅ Save to local storage
+        localStorage.setItem('user_likes', JSON.stringify(newState));
 
         try {
             if (currentLiked) await apiService.unlikeProduct(id);
             else await apiService.likeProduct(id);
         } catch {
-            setIsLiked(prev => ({ ...prev, [id]: currentLiked }));
+            // Revert on failure
+            const revertedState = { ...isLiked, [id]: currentLiked };
+            setIsLiked(revertedState);
+            localStorage.setItem('user_likes', JSON.stringify(revertedState));
             toast.error("Failed to update like");
         }
     };

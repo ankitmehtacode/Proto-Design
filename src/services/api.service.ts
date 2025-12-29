@@ -378,6 +378,10 @@ class ApiService {
         return this.request("/quotes/my");
     }
 
+    async restoreProduct(id: string) {
+        return this.request(`/products/${id}/restore`, { method: "PATCH" });
+    }
+
 }
 
 export const apiService = new ApiService();

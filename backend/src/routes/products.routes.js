@@ -43,10 +43,16 @@ const isAdmin = async (req, res, next) => {
 // GET All Products (with filters)
 router.get('/', async (req, res) => {
     try {
-        const { category, sub_category, search } = req.query;
+        const { category, sub_category, search, show_archived } = req.query; // Add show_archived optional param
+
         let query = 'SELECT * FROM products WHERE 1=1';
         let params = [];
         let paramCount = 1;
+
+        // ONLY show active products by default
+        if (show_archived !== 'true') {
+            query += ` AND is_archived = false`;
+        }
 
         if (category && category !== 'all') {
             query += ` AND category = $${paramCount}`;
@@ -256,10 +262,22 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
 });
 
 // Delete Product
+// Archive Product (Soft Delete)
 router.delete('/:id', authMiddleware, isAdmin, async (req, res) => {
     try {
-        await db.none('DELETE FROM products WHERE id = $1', [req.params.id]);
-        res.json({ message: 'Product deleted successfully' });
+        // Instead of DELETE, we UPDATE
+        await db.none('UPDATE products SET is_archived = true WHERE id = $1', [req.params.id]);
+        res.json({ message: 'Product archived successfully' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Restore Archived Product
+router.patch('/:id/restore', authMiddleware, isAdmin, async (req, res) => {
+    try {
+        await db.none('UPDATE products SET is_archived = false WHERE id = $1', [req.params.id]);
+        res.json({ message: 'Product restored successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

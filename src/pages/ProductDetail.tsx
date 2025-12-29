@@ -383,7 +383,7 @@ const ProductDetail = () => {
                     <div className="flex flex-col pt-4">
                         <div className="mb-4 flex flex-wrap items-center gap-2">
                             <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                                {product.category.replace(/_/g, ' ')}
+                                {(product.category || 'Uncategorized').replace(/_/g, ' ')}
                             </span>
                             {product.sub_category && (
                                 <span className="bg-secondary text-secondary-foreground px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider">

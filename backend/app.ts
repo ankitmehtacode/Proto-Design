@@ -34,17 +34,8 @@ const allowedOrigins = [
     'http://127.0.0.1:8080',
     'http://192.168.29.39:3000',
     'http://192.168.29.39:5173',
+    'http://192.168.29.39:8080', // ✅ ADDED THIS
 ];
-
-// ============================================
-// STATIC FILES
-// ============================================
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-app.use('/uploads', express.static(path.join(__dirname, 'src/uploads')));
-
 
 app.use(cors({
     origin: (origin, callback) => {
@@ -60,22 +51,36 @@ app.use(cors({
 }));
 
 // ============================================
-// BODY PARSING MIDDLEWARE
+// 1. BODY PARSING MIDDLEWARE (MUST BE HERE)
 // ============================================
-
+// This MUST come before any routes are defined!
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ============================================
-// REQUEST LOGGING (Development)
+// 2. DEBUG LOGGING (Check your terminal!)
 // ============================================
-
+// This helps us see exactly what the frontend is sending
 if (process.env.NODE_ENV === 'development') {
     app.use((req, res, next) => {
         console.log(`📝 ${req.method} ${req.path} ${req.ip}`);
+
+        // Log the body for POST/PUT requests to verify data is arriving
+        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+            console.log('📦 Request Body:', req.body ? Object.keys(req.body) : 'undefined');
+        }
         next();
     });
 }
+
+// ============================================
+// STATIC FILES
+// ============================================
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+app.use('/uploads', express.static(path.join(__dirname, 'src/uploads')));
 
 // ============================================
 // API ROUTES

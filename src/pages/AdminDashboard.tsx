@@ -19,6 +19,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch'; // ✅ Import Switch
 import { toast } from 'sonner';
 import {
     Loader2,
@@ -38,11 +39,10 @@ import {
     FileText,
     Eye,
     Layers,
-    Box,
-    Cpu,
     Maximize,
-    Weight,
-    ChevronLeft
+    ChevronLeft,
+    Archive, // ✅ Import Archive Icon
+    RefreshCw // ✅ Import Restore Icon
 } from 'lucide-react';
 import { formatINR } from '@/lib/currency';
 import { apiService } from '@/services/api.service';
@@ -81,6 +81,7 @@ interface Product {
     sub_category?: string;
     video_url?: string | null;
     product_images?: Array<{ id: string; image_url?: string; image_data?: string; display_order: number; }>;
+    is_archived?: boolean; // ✅ Added field
 }
 
 interface Quote {
@@ -178,6 +179,7 @@ export default function AdminDashboard() {
 
     // -- UI State --
     const [showAddProduct, setShowAddProduct] = useState(false);
+    const [showArchived, setShowArchived] = useState(false); // ✅ Toggle state for archives
 
     // -- Pagination State --
     const [ordersPage, setOrdersPage] = useState(1);
@@ -220,6 +222,11 @@ export default function AdminDashboard() {
     // --- INITIALIZATION ---
     useEffect(() => { checkAdminAccess(); }, []);
 
+    // Re-fetch when Archive toggle changes
+    useEffect(() => {
+        if (isAdmin) fetchDashboardData();
+    }, [showArchived]);
+
     // Cleanup blobs
     useEffect(() => { return () => newProductImagePreviews.forEach(url => URL.revokeObjectURL(url)); }, []);
 
@@ -230,7 +237,7 @@ export default function AdminDashboard() {
             const lower = searchTerm.toLowerCase();
             result = result.filter(p =>
                 p.name.toLowerCase().includes(lower) ||
-                p.category.toLowerCase().includes(lower) ||
+                (p.category || '').toLowerCase().includes(lower) ||
                 (p.sub_category || '').toLowerCase().includes(lower)
             );
         }
@@ -268,7 +275,11 @@ export default function AdminDashboard() {
 
     const fetchDashboardData = async () => {
         try {
-            const productsRes = await apiService.getProducts();
+            // ✅ Fetch with archive flag if toggle is on
+            // Note: We use request() directly to append the query param if getProducts doesn't support it yet
+            const productsRes = await apiService.request(
+                showArchived ? '/products?show_archived=true' : '/products'
+            );
             const rawProducts: any = productsRes.data ?? productsRes;
 
             const ordersRes = await apiService.getAdminOrders();
@@ -436,13 +447,27 @@ export default function AdminDashboard() {
         } catch (e: any) { toast.error(e.message || 'Update failed'); }
     };
 
-    const handleDeleteProduct = async (id: string) => {
-        if (!window.confirm("Delete this product?")) return;
+    // ✅ Renamed to handleArchiveProduct
+    const handleArchiveProduct = async (id: string) => {
+        const isRestoring = showArchived;
+        const confirmMsg = isRestoring
+            ? "Are you sure you want to restore this product?"
+            : "Are you sure you want to archive this product? It will be hidden from the shop.";
+
+        if (!window.confirm(confirmMsg)) return;
+
         try {
-            await apiService.deleteProduct(id);
-            toast.success("Product deleted");
+            if (isRestoring) {
+                await apiService.restoreProduct(id);
+                toast.success("Product Restored");
+            } else {
+                await apiService.deleteProduct(id);
+                toast.success("Product Archived");
+            }
             fetchDashboardData();
-        } catch (e) { toast.error("Delete failed"); }
+        } catch (e) {
+            toast.error("Action failed");
+        }
     };
 
     // --- ORDER HANDLERS & FILTERS ---
@@ -521,8 +546,8 @@ export default function AdminDashboard() {
     const displayedQuotes = filteredQuotes.slice((quotesPage - 1) * QUOTES_PER_PAGE, quotesPage * QUOTES_PER_PAGE);
 
     const totalRevenue = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
-    const lowStockProducts = products.filter(p => p.stock > 0 && p.stock < 5);
-    const outOfStockProducts = products.filter(p => p.stock === 0);
+    const lowStockProducts = products.filter(p => p.stock > 0 && p.stock < 5 && !p.is_archived);
+    const outOfStockProducts = products.filter(p => p.stock === 0 && !p.is_archived);
     const avgOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
 
     // --- RENDER HELPERS ---
@@ -545,119 +570,32 @@ export default function AdminDashboard() {
         </div>
     );
 
+    // ... (QuoteSpecsModal remains unchanged) ...
     const QuoteSpecsModal = ({ quote, onClose }: { quote: any, onClose: () => void }) => {
         if (!quote) return null;
-
-        // Handle double-parsing safety
         let specs = quote.specifications || {};
-        if (typeof specs === 'string') {
-            try { specs = JSON.parse(specs); } catch (e) { specs = {}; }
-        }
-
+        if (typeof specs === 'string') { try { specs = JSON.parse(specs); } catch (e) { specs = {}; } }
         const stats = specs.originalStats || {};
         const printDims = specs.printDimensions || {};
 
         return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                 <div className="bg-background rounded-xl border shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-                    {/* Header */}
                     <div className="p-6 border-b flex justify-between items-center bg-muted/20 sticky top-0 bg-background/95 backdrop-blur z-10">
-                        <div>
-                            <h3 className="text-xl font-bold flex items-center gap-2">
-                                <FileText className="text-primary" />
-                                {quote.file_name}
-                            </h3>
-                            <p className="text-sm text-muted-foreground mt-1">Submitted by {quote.email}</p>
-                        </div>
+                        <div><h3 className="text-xl font-bold flex items-center gap-2"><FileText className="text-primary" />{quote.file_name}</h3><p className="text-sm text-muted-foreground mt-1">Submitted by {quote.email}</p></div>
                         <Button variant="ghost" size="icon" onClick={onClose}><X /></Button>
                     </div>
-
                     <div className="p-6 space-y-8">
-                        {/* 1. KEY ESTIMATES */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-100 dark:border-green-900 text-center">
-                                <div className="text-xs font-bold uppercase text-green-600 mb-1">Price</div>
-                                <div className="font-bold text-lg">₹{quote.estimated_price}</div>
-                            </div>
-                            <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-100 dark:border-blue-900 text-center">
-                                <div className="text-xs font-bold uppercase text-blue-600 mb-1">Time</div>
-                                <div className="font-bold text-lg">{specs.estimatedTime || 'N/A'}</div>
-                            </div>
-                            <div className="p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-100 dark:border-orange-900 text-center">
-                                <div className="text-xs font-bold uppercase text-orange-600 mb-1">Weight</div>
-                                <div className="font-bold text-lg">{specs.estimatedWeight || 'N/A'}</div>
-                            </div>
-                            <div className="p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-100 dark:border-purple-900 text-center">
-                                <div className="text-xs font-bold uppercase text-purple-600 mb-1">Volume</div>
-                                <div className="font-bold text-lg">{stats.volume?.toFixed(2) || 0} cm³</div>
-                            </div>
+                            <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-100 dark:border-green-900 text-center"><div className="text-xs font-bold uppercase text-green-600 mb-1">Price</div><div className="font-bold text-lg">₹{quote.estimated_price}</div></div>
+                            <div className="p-3 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-100 dark:border-blue-900 text-center"><div className="text-xs font-bold uppercase text-blue-600 mb-1">Time</div><div className="font-bold text-lg">{specs.estimatedTime || 'N/A'}</div></div>
+                            <div className="p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-100 dark:border-orange-900 text-center"><div className="text-xs font-bold uppercase text-orange-600 mb-1">Weight</div><div className="font-bold text-lg">{specs.estimatedWeight || 'N/A'}</div></div>
+                            <div className="p-3 bg-purple-50 dark:bg-purple-950/30 rounded-lg border border-purple-100 dark:border-purple-900 text-center"><div className="text-xs font-bold uppercase text-purple-600 mb-1">Volume</div><div className="font-bold text-lg">{stats.volume?.toFixed(2) || 0} cm³</div></div>
                         </div>
-
-                        {/* 2. PRINT SETTINGS */}
-                        <div>
-                            <h4 className="font-semibold border-b pb-2 mb-3 flex items-center gap-2">
-                                <Layers size={16} /> Print Settings
-                            </h4>
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                                <div className="space-y-1">
-                                    <span className="text-muted-foreground text-xs uppercase">Material</span>
-                                    <p className="font-medium">{specs.material || 'N/A'}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <span className="text-muted-foreground text-xs uppercase">Quality</span>
-                                    <p className="font-medium">{specs.quality || 'Standard'}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <span className="text-muted-foreground text-xs uppercase">Infill</span>
-                                    <p className="font-medium">{specs.infill || '20%'}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <span className="text-muted-foreground text-xs uppercase">Scale</span>
-                                    <p className="font-medium">{specs.scale || '100%'}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 3. DIMENSIONS & GEOMETRY */}
-                        <div>
-                            <h4 className="font-semibold border-b pb-2 mb-3 flex items-center gap-2">
-                                <Maximize size={16} /> Geometry & Dimensions
-                            </h4>
-                            <div className="bg-muted/30 p-4 rounded-lg space-y-4 text-sm">
-                                <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-                                    <div className="text-muted-foreground">Print Dimensions</div>
-                                    <div className="font-mono font-medium text-right">
-                                        {printDims.x ? `${printDims.x} x ${printDims.y} x ${printDims.z} mm` : 'N/A'}
-                                    </div>
-
-                                    <div className="text-muted-foreground">Original Dimensions</div>
-                                    <div className="font-mono text-right text-muted-foreground">
-                                        {stats.dimensions ? `${stats.dimensions.x?.toFixed(2)} x ${stats.dimensions.y?.toFixed(2)} x ${stats.dimensions.z?.toFixed(2)} mm` : 'N/A'}
-                                    </div>
-
-                                    <div className="text-muted-foreground">Rotation</div>
-                                    <div className="font-mono text-right">{specs.rotation || 'None'}</div>
-
-                                    <div className="text-muted-foreground">Triangle Count</div>
-                                    <div className="font-mono text-right">{stats.triangles?.toLocaleString() || 'N/A'}</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 4. USER NOTES */}
-                        {quote.admin_notes && (
-                            <div className="bg-yellow-50 dark:bg-yellow-950/20 p-4 rounded-md border border-yellow-100 dark:border-yellow-900">
-                                <span className="text-xs font-bold uppercase text-yellow-700 dark:text-yellow-500 mb-1 block">User Notes</span>
-                                <p className="text-sm">{quote.admin_notes}</p>
-                            </div>
-                        )}
-
-                        <div className="flex gap-3">
-                            <Button className="flex-1" asChild>
-                                <a href={quote.file_url} target="_blank" rel="noreferrer">Download STL File</a>
-                            </Button>
-                            <Button variant="outline" onClick={onClose}>Close</Button>
-                        </div>
+                        <div><h4 className="font-semibold border-b pb-2 mb-3 flex items-center gap-2"><Layers size={16} /> Print Settings</h4><div className="grid grid-cols-2 gap-4 text-sm"><div className="space-y-1"><span className="text-muted-foreground text-xs uppercase">Material</span><p className="font-medium">{specs.material || 'N/A'}</p></div><div className="space-y-1"><span className="text-muted-foreground text-xs uppercase">Quality</span><p className="font-medium">{specs.quality || 'Standard'}</p></div><div className="space-y-1"><span className="text-muted-foreground text-xs uppercase">Infill</span><p className="font-medium">{specs.infill || '20%'}</p></div><div className="space-y-1"><span className="text-muted-foreground text-xs uppercase">Scale</span><p className="font-medium">{specs.scale || '100%'}</p></div></div></div>
+                        <div><h4 className="font-semibold border-b pb-2 mb-3 flex items-center gap-2"><Maximize size={16} /> Geometry & Dimensions</h4><div className="bg-muted/30 p-4 rounded-lg space-y-4 text-sm"><div className="grid grid-cols-2 gap-x-8 gap-y-2"><div className="text-muted-foreground">Print Dimensions</div><div className="font-mono font-medium text-right">{printDims.x ? `${printDims.x} x ${printDims.y} x ${printDims.z} mm` : 'N/A'}</div><div className="text-muted-foreground">Original Dimensions</div><div className="font-mono text-right text-muted-foreground">{stats.dimensions ? `${stats.dimensions.x?.toFixed(2)} x ${stats.dimensions.y?.toFixed(2)} x ${stats.dimensions.z?.toFixed(2)} mm` : 'N/A'}</div><div className="text-muted-foreground">Rotation</div><div className="font-mono text-right">{specs.rotation || 'None'}</div><div className="text-muted-foreground">Triangle Count</div><div className="font-mono text-right">{stats.triangles?.toLocaleString() || 'N/A'}</div></div></div></div>
+                        {quote.admin_notes && (<div className="bg-yellow-50 dark:bg-yellow-950/20 p-4 rounded-md border border-yellow-100 dark:border-yellow-900"><span className="text-xs font-bold uppercase text-yellow-700 dark:text-yellow-500 mb-1 block">User Notes</span><p className="text-sm">{quote.admin_notes}</p></div>)}
+                        <div className="flex gap-3"><Button className="flex-1" asChild><a href={quote.file_url} target="_blank" rel="noreferrer">Download STL File</a></Button><Button variant="outline" onClick={onClose}>Close</Button></div>
                     </div>
                 </div>
             </div>
@@ -710,12 +648,30 @@ export default function AdminDashboard() {
                             <Button onClick={() => setShowAddProduct(!showAddProduct)} size="sm"><Plus className="mr-2 h-4 w-4" /> Add Product</Button>
                         </div>
                     </CardHeader>
-                    <div className="px-6 pb-4 flex flex-col sm:flex-row gap-4 border-b">
-                        <div className="relative flex-1"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
-                        <Select value={filterCategory} onValueChange={setFilterCategory}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Category" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{MAIN_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select>
+
+                    {/* ✅ FILTERS ROW (UPDATED WITH ARCHIVE TOGGLE) */}
+                    <div className="px-6 pb-4 flex flex-col sm:flex-row gap-4 border-b items-center">
+                        <div className="relative flex-1 w-full"><Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input placeholder="Search..." className="pl-9" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                            <Select value={filterCategory} onValueChange={setFilterCategory}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Category" /></SelectTrigger><SelectContent><SelectItem value="all">All</SelectItem>{MAIN_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select>
+
+                            <div className="flex items-center space-x-2 border-l pl-3 ml-2">
+                                <Switch
+                                    id="archive-mode"
+                                    checked={showArchived}
+                                    onCheckedChange={setShowArchived}
+                                />
+                                <Label htmlFor="archive-mode" className="text-sm cursor-pointer whitespace-nowrap">
+                                    Show Archived
+                                </Label>
+                            </div>
+                        </div>
                     </div>
+
                     <CardContent className="pt-6">
                         {showAddProduct && (
+                            // ... (Keep existing Add Product form logic same) ...
                             <div className="mb-8 p-6 border rounded-xl bg-secondary/10">
                                 <h3 className="font-bold mb-4 text-lg">Add New Product</h3>
                                 <form onSubmit={handleAddProduct} className="space-y-4">
@@ -743,7 +699,6 @@ export default function AdminDashboard() {
                                             <label className="border-2 border-dashed rounded-md flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 aspect-square"><Upload className="h-6 w-6 text-muted-foreground" /><input type="file" multiple accept="image/*" className="hidden" onChange={handleNewProductImagesUpload} /></label>
                                         </div>
                                     </div>
-                                    {/* Video Upload */}
                                     <div className="mt-4">
                                         <Label>Product Video</Label>
                                         <div className="mt-2 border-2 border-dashed rounded-md p-4 flex flex-col items-center justify-center hover:bg-muted/50 cursor-pointer relative">
@@ -760,8 +715,8 @@ export default function AdminDashboard() {
                             {displayedProducts.map(product => (
                                 <div key={product.id} className="p-4 border rounded-lg hover:bg-muted/5 transition-colors">
                                     {editingProductId === product.id ? (
+                                        // ... (Keep existing Edit Form) ...
                                         <div className="space-y-4">
-                                            {/* EDIT FORM */}
                                             <div className="grid md:grid-cols-2 gap-4">
                                                 <div><Label>Name</Label><Input value={editingProductData.name} onChange={e => setEditingProductData({...editingProductData, name: e.target.value})} /></div>
                                                 <div><Label>Price</Label><Input type="number" value={editingProductData.price} onChange={e => setEditingProductData({...editingProductData, price: e.target.value})} /></div>
@@ -783,17 +738,45 @@ export default function AdminDashboard() {
                                             <div className="flex gap-4 items-start flex-1">
                                                 <div className="h-24 w-24 bg-white rounded-md overflow-hidden shrink-0 border p-1"><img src={product.image_url || "/placeholder.svg"} alt={product.name} className="w-full h-full object-contain" /></div>
                                                 <div className="space-y-1">
-                                                    <div className="flex items-center gap-2 flex-wrap"><span className="font-bold text-lg">{product.name}</span><Badge variant="secondary">{product.category.replace(/_/g, ' ')}</Badge>{product.sub_category && <Badge variant="outline">{product.sub_category}</Badge>}</div>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="font-bold text-lg">{product.name}</span>
+                                                        {/* ✅ Safe Access to category */}
+                                                        <Badge variant="secondary">{(product.category || 'Unknown').replace(/_/g, ' ')}</Badge>
+                                                        {product.sub_category && <Badge variant="outline">{product.sub_category}</Badge>}
+                                                        {/* ✅ Archived Badge */}
+                                                        {product.is_archived && <Badge className="bg-orange-500 text-white">Archived</Badge>}
+                                                    </div>
                                                     <p className="text-sm text-muted-foreground line-clamp-2 max-w-2xl">{product.short_description|| product.description}</p>
-                                                    {product.stock < 5 && <div className={`text-xs font-medium flex items-center gap-1 ${product.stock === 0 ? 'text-red-600' : 'text-orange-600'}`}><AlertTriangle size={12} />{product.stock === 0 ? "Out of Stock" : `Low Stock: ${product.stock}`}</div>}
+
+                                                    {product.stock < 5 && !product.is_archived && <div className={`text-xs font-medium flex items-center gap-1 ${product.stock === 0 ? 'text-red-600' : 'text-orange-600'}`}><AlertTriangle size={12} />{product.stock === 0 ? "Out of Stock" : `Low Stock: ${product.stock}`}</div>}
                                                 </div>
                                             </div>
                                             <div className="text-right flex flex-col items-end gap-1 min-w-[100px]">
                                                 <span className="font-bold text-xl">{formatINR(product.price)}</span>
                                                 <span className="text-sm text-muted-foreground">Stock: {product.stock}</span>
                                                 <div className="flex gap-2 w-full mt-2">
-                                                    <Button variant="outline" size="sm" onClick={() => startEditProduct(product)} className="flex-1"><Edit3 size={14} className="mr-2"/> Edit</Button>
-                                                    <Button variant="destructive" size="sm" onClick={() => handleDeleteProduct(product.id)}><Trash2 size={14} /></Button>
+                                                    {!product.is_archived && (
+                                                        <Button variant="outline" size="sm" onClick={() => startEditProduct(product)} className="flex-1">
+                                                            <Edit3 size={14} className="mr-2"/> Edit
+                                                        </Button>
+                                                    )}
+
+                                                    {/* ✅ Updated Button: Archive instead of Delete */}
+                                                    <Button
+                                                        variant={product.is_archived ? "outline" : "destructive"}
+                                                        size="sm"
+                                                        onClick={() => handleArchiveProduct(product.id)}
+                                                    >
+                                                        {product.is_archived ? (
+                                                            <>
+                                                                <RefreshCw size={14} className="mr-2"/> Restore
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Archive size={14} className="mr-2" /> Archive
+                                                            </>
+                                                        )}
+                                                    </Button>
                                                 </div>
                                             </div>
                                         </div>
@@ -804,7 +787,7 @@ export default function AdminDashboard() {
                     </CardContent>
                 </Card>
 
-                {/* ORDERS SECTION (WITH PAGINATION & RESTORED FILTERS) */}
+                {/* ORDERS SECTION ... (Rest of file remains unchanged) ... */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
                         <div><CardTitle>Recent Orders</CardTitle><CardDescription>View and manage orders</CardDescription></div>
@@ -887,7 +870,7 @@ export default function AdminDashboard() {
                     </CardContent>
                 </Card>
 
-                {/* QUOTE MANAGEMENT (WITH PAGINATION & FILTER) */}
+                {/* QUOTE MANAGEMENT ... (Rest of file remains unchanged) ... */}
                 <Card className="mt-8">
                     <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
                         <div><CardTitle>Custom Print Requests</CardTitle><CardDescription>Manage incoming quotes</CardDescription></div>
