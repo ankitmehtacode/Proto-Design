@@ -11,7 +11,7 @@
     "dev:network": "cross-env HOST=0.0.0.0 PORT=3001 tsx app.ts",
     "start:network": "cross-env HOST=0.0.0.0 PORT=3001 node dist/app.js",
     "db:setup": "psql -U postgres -f migrations/000_create_database.sql",
-    "migrate": "psql -U protodesign_user -d protodesign -f migrations/001_initial_schema.sql",
+    "migrate": "psql -U protodesign_user -d protodesign -f migrations/old migrations/001_initial_schema.sql",
     "db:reset": "npm run db:setup && npm run migrate",
     "migrate:test": "psql -U protodesign_user -d protodesign -c \"SELECT * FROM users;\""
   },
