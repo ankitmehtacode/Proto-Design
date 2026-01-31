@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { CreditCard, Smartphone, Wallet, Bitcoin } from 'lucide-react';
@@ -15,6 +14,13 @@ interface PaymentGateway {
 }
 
 const PAYMENT_GATEWAYS: PaymentGateway[] = [
+  {
+    id: 'phonepe',
+    name: 'PhonePe',
+    description: 'UPI, Wallets, Credit/Debit Cards',
+    icon: <Smartphone className="w-6 h-6 text-[#5f259f]" />, // PhonePe Purple Brand Color
+    methods: ['UPI', 'GPay', 'PhonePe', 'Cards'],
+  },
   {
     id: 'razorpay',
     name: 'Razorpay',
@@ -56,7 +62,8 @@ export const PaymentGatewaySelector = ({
   onSelect,
   selected,
 }: PaymentGatewaySelectorProps) => {
-  const [selectedGateway, setSelectedGateway] = useState(selected || 'razorpay');
+  // Default to PhonePe
+  const [selectedGateway, setSelectedGateway] = useState(selected || 'phonepe');
 
   const handleSelect = (gatewayId: string) => {
     setSelectedGateway(gatewayId);
@@ -88,7 +95,7 @@ export const PaymentGatewaySelector = ({
                 <RadioGroupItem value={gateway.id} id={gateway.id} className="mt-1" />
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="text-primary">{gateway.icon}</div>
+                    <div className="text-foreground">{gateway.icon}</div>
                     <Label htmlFor={gateway.id} className="text-lg font-semibold cursor-pointer">
                       {gateway.name}
                     </Label>
