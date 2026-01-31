@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { PaymentGatewaySelector } from '@/components/PaymentGatewaySelector';
 import { formatINR } from '@/lib/currency';
 import { toast } from 'sonner';
-import { Loader2, MapPin } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { apiService } from '@/services/api.service';
 import {
     Select,
@@ -34,9 +34,9 @@ const Checkout = () => {
     const navigate = useNavigate();
     const { items, total, clearCart } = useCart();
     const [loading, setLoading] = useState(false);
-    const [selectedGateway, setSelectedGateway] = useState('razorpay');
+    const [selectedGateway, setSelectedGateway] = useState('phonepe'); // Default to PhonePe
 
-    // 🔥 NEW: Address State
+    // Address State
     const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
     const [selectedAddressId, setSelectedAddressId] = useState('new');
 
@@ -65,8 +65,6 @@ const Checkout = () => {
         if (items.length === 0) {
             navigate('/cart');
         }
-
-        // 🔥 NEW: Fetch Addresses
         loadAddresses();
     }, [items.length, navigate]);
 
@@ -74,7 +72,6 @@ const Checkout = () => {
         try {
             const addrs = await apiService.getAddresses();
             setSavedAddresses(addrs);
-            // Optional: Auto-select default
             const def = addrs.find((a: any) => a.is_default);
             if(def) handleAddressSelect(def.id, addrs);
         } catch (e) { console.error("Failed to load addresses", e); }
@@ -125,11 +122,6 @@ const Checkout = () => {
             toast.error('Please enter a valid 10-digit Indian phone number');
             return false;
         }
-        const pincodeRegex = /^[1-9][0-9]{5}$/;
-        if (!pincodeRegex.test(formData.pincode)) {
-            toast.error('Please enter a valid 6-digit Pincode');
-            return false;
-        }
         return true;
     };
 
@@ -138,14 +130,13 @@ const Checkout = () => {
         setLoading(true);
 
         try {
-            await apiService.getCurrentUser();
-
             const orderItems = items.map((item) => ({
                 product_id: item.product_id,
                 quantity: item.quantity,
             }));
 
-            await apiService.createOrder(
+            // Create Order on Backend
+            const response = await apiService.createOrder(
                 orderItems,
                 finalTotal,
                 formData,
@@ -153,16 +144,29 @@ const Checkout = () => {
                 shipping
             );
 
-            toast.success('Order placed successfully! Redirecting...');
+            // 🚀 PhonePe Redirect Logic
+            if (selectedGateway === 'phonepe' && response.paymentUrl) {
+                toast.success('Initiating PhonePe Payment...');
+                // Redirect user to PhonePe Gateway
+                window.location.href = response.paymentUrl;
+                return; // Stop here, don't clear cart yet (wait for success callback)
+            }
+
+            // Standard success for COD or other gateways without redirect
+            toast.success('Order placed successfully!');
             await clearCart();
             setTimeout(() => {
                 navigate('/orders');
-            }, 2000);
+            }, 1500);
+
         } catch (error: any) {
             console.error('Order error:', error);
             toast.error(error.message || 'Failed to place order');
         } finally {
-            setLoading(false);
+            // Only stop loading if we are NOT redirecting
+            if (selectedGateway !== 'phonepe') {
+                setLoading(false);
+            }
         }
     };
 
@@ -177,8 +181,6 @@ const Checkout = () => {
                         <Card className="p-6">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-2xl font-semibold">Shipping Details</h2>
-
-                                {/* 🔥 NEW: Saved Address Selector (Subtle) */}
                                 {savedAddresses.length > 0 && (
                                     <div className="w-[200px]">
                                         <Select value={selectedAddressId} onValueChange={(val) => handleAddressSelect(val)}>
@@ -215,7 +217,6 @@ const Checkout = () => {
                                         type="email"
                                         value={formData.email}
                                         onChange={handleInputChange}
-                                        placeholder="john@example.com"
                                         required
                                     />
                                 </div>
@@ -231,7 +232,6 @@ const Checkout = () => {
                                             type="tel"
                                             value={formData.phone}
                                             onChange={handleInputChange}
-                                            placeholder="9876543210"
                                             className="rounded-l-none"
                                             required
                                             maxLength={10}
@@ -245,7 +245,6 @@ const Checkout = () => {
                                         name="pincode"
                                         value={formData.pincode}
                                         onChange={handleInputChange}
-                                        placeholder="110001"
                                         maxLength={6}
                                         required
                                     />
@@ -258,7 +257,6 @@ const Checkout = () => {
                                         value={formData.address}
                                         onChange={handleInputChange}
                                         rows={3}
-                                        placeholder="House No, Street, Landmark"
                                         required
                                     />
                                 </div>
@@ -332,7 +330,7 @@ const Checkout = () => {
                                     <span>{formatINR(subtotal)}</span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span>Shipping (Standard)</span>
+                                    <span>Shipping</span>
                                     <span>{formatINR(shipping)}</span>
                                 </div>
                                 <div className="flex justify-between">
@@ -361,10 +359,6 @@ const Checkout = () => {
                                     `Pay ${formatINR(finalTotal)}`
                                 )}
                             </Button>
-
-                            <p className="text-xs text-muted-foreground text-center mt-4">
-                                By placing this order, you agree to our Terms & Conditions
-                            </p>
                         </Card>
                     </div>
                 </div>
